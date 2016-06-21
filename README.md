@@ -143,3 +143,150 @@ the arguments needed as well to invoke the callable if need be.
 
 Context managers may nest, and in fact any combination of function decorator and context manager
 will work as expected.
+
+Let's look at an example with more complex calling relationships. Suppose we have functions
+A, B, C, D, E, and F. They have the following calling relationships:
+
+A calls B and C
+B calls D
+C calls E or F
+D calls F
+
+We'll make it so that if we're unlucky enough to call E, we'll get an exception raised.
+This will happen only for input values of A greater than 10.
+
+So let's define these functions and narrate them-- paste these into an interactive
+Python session after you've imported errator:
+
+```python
+@narrate(lambda v: "I'm trying to A with %s as input" % v)
+def A(val):
+    B(val / 2)
+    C(val * 2)
+    
+@narrate(lambda v: "I'm trying to B with %s as input" % v)
+def B(val):
+    D(val * 10)
+    
+@narrate(lambda v: "I'm trying to C with %s as input" % v)
+def C(val):
+    if val > 20:
+        E(val)
+    else:
+        F(val)
+        
+@narrate(lambda v: "I'm trying to D with %s as input" % v)
+def D(val):
+    F(val * 3)
+    
+@narrate(lambda v: "I'm trying to E with %s as input" % v)
+def E(val):
+    raise ValueError("how dare you call me with such a value?")
+    
+@narrate(lambda v: "I'm trying to F with %s as input" % v)
+def F(val):
+    print("very well")
+```
+
+Now run A with a value less than 11, and look for narration text:
+
+```python
+>>> A(3)
+very well
+very well
+>>> get_narration_text()
+[]
+>>> 
+```
+
+Now run A with a value greater than 10:
+
+```python
+>>> A(11)
+very well
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "errator.py", line 322, in callit
+    _v = m(*args, **kwargs)
+  File "<stdin>", line 4, in A
+  File "errator.py", line 322, in callit
+    _v = m(*args, **kwargs)
+  File "<stdin>", line 4, in C
+  File "errator.py", line 322, in callit
+    _v = m(*args, **kwargs)
+  File "<stdin>", line 3, in E
+ValueError: how dare you call me with such a value?
+>>> 
+```
+
+So far, it's as we'd expect, except perhaps for the inclusion of errator calls in the stack.
+But now let's look at the narration:
+
+```python
+>>> for l in get_narration_text():
+...     print(l)
+... 
+I'm trying to A with 11 as input
+I'm trying to C with 22 as input
+I'm trying to E with 22 as input, but exception type: ValueError, value: how dare you call me with such a value? was raised
+>>> 
+```
+
+We have a narration for our recent exception. Now try the following:
+
+```python
+>>> A(8)
+very well
+very well
+>>> get_narration_text()
+["I'm trying to A with 11 as input", "I'm trying to C with 22 as input", # etc...
+```
+
+Wait, this didn't have an exception; why is there still narration? This is because
+an error narration only gets cleared out if a decorated function does NOT
+have an exception bubble up; the assumption is that the exception was
+caught and the narration was retrieved, so a decorated function that returns
+normally would remove the previous narration fragments. In our example, there is
+no function that is decorated with narrate() that catches the exception and
+returns normally, so the narration never clears out.
+
+There are a few ways to clear unwanted narrations: first is to manually clear the
+narration, and the other is to make sure you have a decorated
+function that catches the exception and returns normally, which will clear
+the narration automatically
+
+To manually clear narrations we call reset_narration():
+
+```python
+>>> reset_narration()
+>>> get_narration_text()
+>>> []
+```
+
+For the second, if we define a decorated function that calls A but which handles
+the exception and returns normally, the narration fragments will be cleaned
+up automatically:
+
+```python
+@narrate("Handler for A")
+def first(val):
+    try:
+        A(val)
+    except:
+        print("Got %d narration lines" % len(get_narration_text()))
+```
+
+This outermost function still can retrieve the narration, but as it returns normally,
+the narration is cleared out when it returns:
+
+```python
+>>> first(11)
+very well
+Got 4 narration lines
+>>> get_narration_text()
+[]
+>>> 
+```
+
+Errator provides finer degrees of control for getting the narration; these are 
+covered in the detailed docs.
