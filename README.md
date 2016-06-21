@@ -50,8 +50,8 @@ Errator is a single file, and can be installed either with pip or running
 'python setup.py install' after pulling the Git project.
 
 ## <a name="quickstart">Quick Start</a>
-The next section discusses Errator with functions, but you can also use it the decorators
-described with methods, too.
+The next section discusses Errator with functions, but you can also use the decorators
+described with methods too.
 
 Start with pulling errator into your module that you want to narrate:
 

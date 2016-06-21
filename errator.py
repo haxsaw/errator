@@ -107,7 +107,7 @@ class NarrationFragment(object):
         self.context = context
 
     def fragment_exception_text(self, etype, text):
-        self.exception_text = "exception type: {}, value: '{}'".format(etype.__name__, text)
+        self.exception_text = "exception type: {}, value: {}".format(etype.__name__, text)
 
     def tell_ex(self):
         tale = self.format()

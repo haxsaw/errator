@@ -439,8 +439,24 @@ def test18():
     assert len(l2) == 0, "Expecting no lines, got {}".format(len(l2))
 
 
+def test19():
+    """
+    test19: makng sure the example in the quickstart works as it says!
+    """
+    reset_all_narrations()
+
+    @narrate("I was just showing how it works")
+    def f1():
+        raise KeyError("when I blorked")
+
+    try:
+        f1()
+    except KeyError:
+        lines = get_narration_text()
+        assert len(lines) == 1, "Expecting 1 line, got {}".format(len(lines))
+
+
 def do_all():
-    test18()
     for k, v in sorted(globals().items()):
         if callable(v) and k.startswith("test"):
             print("Running test {}".format(k))
