@@ -8,11 +8,12 @@ Errator.
 2. [How it works](#howitworks)
 3. [Requirements](#reqs)
 2. [Installing](#installing)
-5. [Quick Start](#quickstart)
+5. [Quick Tutorial](#quickstart)
 
 ## <a name="intro">Intro</a>
 
-Errator came as an idea on the back of trying to figure out what the meaning of an exception traceback is in non-trivial pieces of code.
+Errator came as an idea on the back of trying to figure out what the meaning
+of an exception traceback is in non-trivial pieces of code.
 
 When an exception occurs deep inside a call stack within some generic
 utility function that is used in numerous contexts, reading the traceback
@@ -27,7 +28,7 @@ with the error.
 
 Errator is something of a marriage between logging and tracebacks: plain text messages that are associated
 directly with the call trail that led to an exception. Errator works by providing tools that let you state intent
-of code in text, but only captures that text when an exception bubbles up
+of code in text, but only captures that text when an exception bubbles
 up the stack. You can then acquire this "error narration" and display it
 to your user in the most appropriate fashion.
 
@@ -41,15 +42,18 @@ exception doesn't propagate any further up the stack, or can be discarded
 under user control, allowing more control over the content of "narration" provided
 for the exception.
 
+Errator is thread-safe, allowing you to capture separate error narrations for independent
+threads of control through the same code.
+
 ## <a name="reqs">Requirements</a>
 Errator doesn't have any external dependencies. It is compatible with
-Python 2 and 3.
+Python 2.7 and 3.x.
 
 ## <a name="installing">Installing</a>
 Errator is a single file, and can be installed either with pip or running
 'python setup.py install' after pulling the Git project.
 
-## <a name="quickstart">Quick Start</a>
+## <a name="quickstart">Quick Tutorial</a>
 The next section discusses Errator with functions, but you can also use the decorators
 described with methods too.
 
@@ -65,7 +69,7 @@ Your function is called all over the place for a variety of different reasons,
 often very deep down the call stack where it isn't obvious what the original
 functional intent was, or where the source of bad arguments may have been.
 
-To start building the narration to your function's execution, you can use the 'narrate'
+To start building the narration to your function's execution, you can use the narrate()
 decorator to associate a bit of text with your utility function to provide easily understandable
 explanations about what's going on:
 
@@ -75,7 +79,7 @@ def special_formatter(fmt_string, **kwargs):
     # magic format code that sometimes raises an exception
 ```
 
-The 'narrate()' decorator knows to look for exceptions and doesn't impede their propagation,
+The narrate() decorator knows to look for exceptions and doesn't impede their propagation,
 but captures that bit of text in an internal stack when an exception occurs. So if you
 write:
 
@@ -147,10 +151,12 @@ will work as expected.
 Let's look at an example with more complex calling relationships. Suppose we have functions
 A, B, C, D, E, and F. They have the following calling relationships:
 
+<verbatim>
 A calls B and C
 B calls D
 C calls E or F
 D calls F
+</verbatim>
 
 We'll make it so that if we're unlucky enough to call E, we'll get an exception raised.
 This will happen only for input values of A greater than 10.

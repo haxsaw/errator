@@ -4,7 +4,7 @@ import threading
 from collections import deque
 from errator import (narrate, NarrationFragment, _thread_fragments, reset_all_narrations,
                      narrate_cm, copy_narration, reset_narration,
-                     get_narration_text, set_narration_options)
+                     get_narration, set_narration_options)
 
 
 def test01():
@@ -308,7 +308,7 @@ def test14():
         assert False, "We should have had an exception bubble up!"
     except T14Exc as e:
         assert str(e) == exc_text
-        lines = get_narration_text()
+        lines = get_narration()
         assert len(lines) == 3, "Expecting 3 lines, got {}".format(len(lines))
         assert exc_text not in lines[0]
         assert exc_text not in lines[1]
@@ -331,7 +331,7 @@ def test15():
         try:
             f3()
         except KeyError:
-            lines = get_narration_text(from_here=True)
+            lines = get_narration(from_here=True)
             assert len(lines) == 3
             reset_narration(from_here=True)
 
@@ -344,7 +344,7 @@ def test15():
         raise KeyError("wibble")
 
     f1()
-    l2 = get_narration_text()
+    l2 = get_narration()
     assert len(l2) == 1, "Expected there to be one left, got {}".format(len(l2))
     set_narration_options(auto_prune=True)
     reset_all_narrations()
@@ -363,7 +363,7 @@ def test16():
             f2()
         except KeyError:
             reset_narration(from_here=True)
-            lines = get_narration_text(from_here=True)
+            lines = get_narration(from_here=True)
             assert len(lines) == 1, "Expected 1 line, got {}".format(len(lines))
 
     @narrate("f2")
@@ -375,7 +375,7 @@ def test16():
         raise KeyError("oopsie!")
 
     f1()
-    l2 = get_narration_text()
+    l2 = get_narration()
     assert len(l2) == 0, "Expected 0 lines, got {}".format(len(l2))
 
 
@@ -392,7 +392,7 @@ def test17():
             f2()
         except KeyError:
             reset_narration(from_here=True)
-            lines = get_narration_text(from_here=True)
+            lines = get_narration(from_here=True)
             assert len(lines) == 0, "Expected 0 lines, got {}".format(len(lines))
 
     @narrate("f2")
@@ -403,7 +403,7 @@ def test17():
     def f3():
         raise KeyError("youch!")
 
-    lines = get_narration_text()
+    lines = get_narration()
     assert len(lines) == 0, "Expected 0 lines, got {}".format(len(lines))
     set_narration_options(auto_prune=True)
 
@@ -422,26 +422,26 @@ def test18():
                 f2()
             except KeyError:
                 reset_narration(from_here=True)
-                lines = get_narration_text(from_here=True)
+                lines = get_narration(from_here=True)
                 assert len(lines) == 1, "Expecting 1 lines, got {}".format(len(lines))
 
     @narrate("f2")
     def f2():
-        lines = get_narration_text()
+        lines = get_narration()
         assert len(lines) == 2, "Expecting 2 lines, got {}".format(len(lines))
         with narrate_cm("f3 context"):
-            lines = get_narration_text()
+            lines = get_narration()
             assert len(lines) == 3, "Expecting 3 lines, got {}".format(len(lines))
             raise KeyError
 
     f1()
-    l2 = get_narration_text()
+    l2 = get_narration()
     assert len(l2) == 0, "Expecting no lines, got {}".format(len(l2))
 
 
 def test19():
     """
-    test19: makng sure the example in the quickstart works as it says!
+    test19: making sure the example in the quickstart works as it says!
     """
     reset_all_narrations()
 
@@ -452,8 +452,63 @@ def test19():
     try:
         f1()
     except KeyError:
-        lines = get_narration_text()
+        lines = get_narration()
         assert len(lines) == 1, "Expecting 1 line, got {}".format(len(lines))
+
+
+def test20():
+    """
+    test20:
+    :return: if auto_prune is off, check that 'clear to hear' removes the first tracked func
+    """
+    reset_all_narrations()
+    set_narration_options(auto_prune=False)
+
+    @narrate("f1")
+    def f1():
+        f2()
+        lines = get_narration()
+        assert "f1" not in lines
+
+    def f2():
+        try:
+            f3()
+        except KeyError:
+            lines = get_narration(from_here=True)
+            assert "f1" in lines
+            reset_narration(from_here=True)
+
+    @narrate("f3")
+    def f3():
+        raise KeyError("ouch")
+
+    f1()
+    set_narration_options(auto_prune=True)
+
+
+def test21():
+    """
+    test21: Check that auto_prune==False still gets all clear when all funcs return
+    """
+    reset_all_narrations()
+    set_narration_options(auto_prune=False)
+
+    @narrate("f1")
+    def f1():
+        f2()
+
+    @narrate("f2")
+    def f2():
+        raise KeyError("another mistake? I'm fired")
+
+    try:
+        f1()
+    except KeyError:
+        lines = get_narration()
+        assert len(lines) == 2, "Expected 2 lines, got {}".format(len(lines))
+        reset_narration(from_here=True)
+        lines = get_narration()
+        assert len(lines) == 0, "Expected no lines, got {}".format(len(lines))
 
 
 def do_all():

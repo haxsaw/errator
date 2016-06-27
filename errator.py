@@ -107,7 +107,7 @@ class NarrationFragment(object):
         self.context = context
 
     def fragment_exception_text(self, etype, text):
-        self.exception_text = "exception type: {}, value: {}".format(etype.__name__, text)
+        self.exception_text = "exception type: {}, value: '{}'".format(etype.__name__, text)
 
     def tell_ex(self):
         tale = self.format()
@@ -116,9 +116,9 @@ class NarrationFragment(object):
         return output
 
 
-class narration_fragment_context_manager(NarrationFragment):
+class NarrationFragmentContextManager(NarrationFragment):
     def format(self):
-        tale = super(narration_fragment_context_manager, self).format()
+        tale = super(NarrationFragmentContextManager, self).format()
         return "    {}".format(tale)
 
     def __enter__(self):
@@ -192,6 +192,9 @@ def reset_narration(thread=None, from_here=False):
                         target = d[i]
                         d.pop_until_true(lambda x: x is target)
                     break
+            else:
+                # in this case, nothing was IN_PROCESS, so we should clear all
+                d.clear()
 
 
 def set_narration_options(thread=None, auto_prune=True):
@@ -253,7 +256,7 @@ def copy_narration(thread=None, from_here=False):
     return l
 
 
-def get_narration_text(thread=None, from_here=False):
+def get_narration(thread=None, from_here=False):
     """
     Return a list of strings, each one a narration fragment in the function call path.
 
@@ -312,7 +315,7 @@ def narrate(str_or_func):
         may not be the values that were actually passed into the decorated function.
     """
     def capture_stanza(m):
-        def callit(*args, **kwargs):
+        def narrate_it(*args, **kwargs):
             fragment = NarrationFragment(str_or_func, *args, **kwargs)
             fragment.calling = m
             tname = threading.current_thread().name
@@ -335,13 +338,10 @@ def narrate(str_or_func):
                 _ = fragment.format()  # get the formatted fragment right now!
                 raise
 
-        callit.__name__ = m.__name__
-        callit.__doc__ = m.__doc__
-        callit.__dict__.update(m.__dict__)
-        # for k, v in m.__dict__.items():
-        #     if k not in _expected_attrs:
-        #         setattr(callit, k, v)
-        return callit
+        narrate_it.__name__ = m.__name__
+        narrate_it.__doc__ = m.__doc__
+        narrate_it.__dict__.update(m.__dict__)
+        return narrate_it
     return capture_stanza
 
 
@@ -368,10 +368,10 @@ def narrate_cm(text_or_func, *args, **kwargs):
         keyword arguments are ignored.
     :return: An errator context manager (NarrationFragmentContextManager)
     """
-    ifsf = narration_fragment_context_manager(text_or_func, *args, **kwargs)
+    ifsf = NarrationFragmentContextManager(text_or_func, *args, **kwargs)
     return ifsf
 
 
-__all__ = ("narrate", "narrate_cm", "copy_narration", "NarrationFragment", "narration_fragment_context_manager",
-           "reset_all_narrations", "reset_narration", "get_narration_text", "set_narration_options",
+__all__ = ("narrate", "narrate_cm", "copy_narration", "NarrationFragment", "NarrationFragmentContextManager",
+           "reset_all_narrations", "reset_narration", "get_narration", "set_narration_options",
            "ErratorException")
