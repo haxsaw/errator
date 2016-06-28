@@ -87,11 +87,11 @@ write:
 try:
     s = special_formatter(fmt, **args)
 exception Exception:
-    the_tale = get_narration_text()
+    the_tale = get_narration()
 ```
 
 ...and special_formatter() raises an exception, the exception will still bubble up the stack,
-but get_narration_text() will return a list of strings for all the narrate()
+but get_narration() will return a list of strings for all the narrate()
 decorated functions down to the exception. If no exception is raised, there
 are no strings (well, it's a little more complicated than that, but we'll
 get to that).
@@ -200,7 +200,7 @@ Now run A with a value less than 11, and look for narration text:
 >>> A(3)
 very well
 very well
->>> get_narration_text()
+>>> get_narration()
 []
 >>> 
 ```
@@ -229,7 +229,7 @@ So far, it's as we'd expect, except perhaps for the inclusion of errator calls i
 But now let's look at the narration:
 
 ```python
->>> for l in get_narration_text():
+>>> for l in get_narration():
 ...     print(l)
 ... 
 I'm trying to A with 11 as input
@@ -244,7 +244,7 @@ We have a narration for our recent exception. Now try the following:
 >>> A(8)
 very well
 very well
->>> get_narration_text()
+>>> get_narration()
 ["I'm trying to A with 11 as input", "I'm trying to C with 22 as input", # etc...
 ```
 
@@ -265,7 +265,7 @@ To manually clear narrations we call reset_narration():
 
 ```python
 >>> reset_narration()
->>> get_narration_text()
+>>> get_narration()
 >>> []
 ```
 
@@ -279,7 +279,7 @@ def first(val):
     try:
         A(val)
     except:
-        print("Got %d narration lines" % len(get_narration_text()))
+        print("Got %d narration lines" % len(get_narration()))
 ```
 
 This outermost function still can retrieve the narration, but as it returns normally,
@@ -289,7 +289,7 @@ the narration is cleared out when it returns:
 >>> first(11)
 very well
 Got 4 narration lines
->>> get_narration_text()
+>>> get_narration()
 []
 >>> 
 ```
