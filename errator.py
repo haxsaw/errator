@@ -1,14 +1,15 @@
 import threading
 from collections import deque
+import inspect
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 class ErratorException(Exception):
     pass
 
 
-# fragments is hashed by a thread's name and contains a list StoryFragments for each frame
+# _thread_fragments is hashed by a thread's name and contains a list StoryFragments for each frame
 # in the thread's call path
 _thread_fragments = {}
 
@@ -182,7 +183,16 @@ class NarrationFragmentContextManager(NarrationFragment):
             # then all went well; pop ourselves off the end
             self.status = self.COMPLETED
             if d.check:
-                _ = self.format()
+                try:
+                    _ = self.format()
+                except Exception as e:
+                    ctx_frame = inspect.getouterframes(inspect.currentframe())[1]
+                    frame, fname, lineno, function, _, _ = ctx_frame
+                    del frame, function, ctx_frame
+                    raise ErratorException("Failed formatting fragment in context; got exception {}, '{}'; "
+                                           "{}:{} is the last line of the context".format(type(e), str(e),
+                                                                                          fname, lineno))
+
             if d and d.auto_prune:
                 d.pop_until_true(lambda item: item.calling == item)
             self.calling = None  # break ref cycle
@@ -192,7 +202,15 @@ class NarrationFragmentContextManager(NarrationFragment):
                 self.status = self.RAISED_EXCEPTION
             else:
                 self.status = self.PASSEDTHRU_EXCEPTION
-            _ = self.format()
+            try:
+                _ = self.format()
+            except Exception as e:
+                ctx_frame = inspect.getouterframes(inspect.currentframe())[1]
+                frame, fname, lineno, function, _, _ = ctx_frame
+                del frame, function, ctx_frame
+                raise ErratorException("Failed formatting fragment in context; got exception {}, '{}'; "
+                                       "{}:{} is the last line of the context".format(type(e), str(e),
+                                                                                      fname, lineno))
 
 
 def reset_all_narrations():
@@ -401,7 +419,11 @@ def narrate(str_or_func):
                 _v = m(*args, **kwargs)
                 fragment.status = fragment.COMPLETED
                 if frag_deque.check:
-                    _ = fragment.format()
+                    try:
+                        _ = fragment.format()
+                    except Exception as e:
+                        raise ErratorException("Failed formatting the fragment for function {}; "
+                                               "received exception {}, '{}'".format(m, type(e), str(e)))
                 if frag_deque and frag_deque.auto_prune:
                     frag_deque.pop_until_true(lambda item: item.calling == fragment.calling)
                 fragment = None
@@ -413,7 +435,11 @@ def narrate(str_or_func):
                     fragment.status = fragment.RAISED_EXCEPTION
                 else:
                     fragment.status = fragment.PASSEDTHRU_EXCEPTION
-                _ = fragment.format()  # get the formatted fragment right now!
+                try:
+                    _ = fragment.format()  # get the formatted fragment right now!
+                except Exception as e:
+                    raise ErratorException("Failed formatting the fragment for function {}; "
+                                           "received exception {}, '{}'".format(m, type(e), str(e)))
                 raise
 
         narrate_it.__name__ = m.__name__

@@ -4,7 +4,7 @@ import threading
 from collections import deque
 from errator import (narrate, NarrationFragment, _thread_fragments, reset_all_narrations,
                      narrate_cm, copy_narration, reset_narration,
-                     get_narration, set_narration_options)
+                     get_narration, set_narration_options, ErratorException)
 
 
 def test01():
@@ -585,6 +585,83 @@ def test24():
     reset_all_narrations()
     set_narration_options(auto_prune=True, check=False)
 
+
+def test25():
+    """
+    test25: check that we get an ErratorException when we try to run a broken callable for a context
+    """
+
+    set_narration_options(check=True)
+    reset_all_narrations()
+
+    try:
+        with narrate_cm(lambda arg: "oops"):
+            pass
+    except ErratorException:
+        pass
+    else:
+        assert False, "We should have raised an exception"
+
+    set_narration_options(check=False)
+
+
+def test26():
+    """
+    test26: check that we get an ErratorException when we try to run a broken callable during an exception
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        with narrate_cm(lambda arg: "oops"):
+            raise KeyError("not this one")
+    except ErratorException:
+        pass
+    except KeyError:
+        assert False, "KeyError should not have come through"
+    else:
+        assert False, "We should have gotten an exception"
+
+
+def test27():
+    """
+    test27: check that we get an ErratorException from the decorator for a broken callable with check
+    """
+    set_narration_options(check=True)
+    reset_all_narrations()
+
+    @narrate(lambda x, y: "again")
+    def f():
+        pass
+
+    try:
+        f()
+    except ErratorException:
+        pass
+    else:
+        assert False, "we should have got an exception"
+    set_narration_options(check=False)
+
+
+def test28():
+    """
+    test28: check that we get an ErratorException from the decorator for a broken callable without check
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate(lambda missing: "oops")
+    def f():
+        raise KeyError("heads up")
+
+    try:
+        f()
+    except ErratorException:
+        pass
+    except KeyError:
+        assert False, "We shouldn't have gotten a KeyError"
+    else:
+        assert False, "we should have gotten an exception"
 
 def do_all():
     for k, v in sorted(globals().items()):
