@@ -511,6 +511,81 @@ def test21():
         assert len(lines) == 0, "Expected no lines, got {}".format(len(lines))
 
 
+def test22():
+    """
+    test22: ensure proper behavior when decorating a method on a class
+    """
+    reset_all_narrations()
+    set_narration_options(auto_prune=True)
+
+    class T22(object):
+        @narrate(lambda _, x: "x is {}".format(x))
+        def m(self, x):
+            raise KeyError("die m die")
+
+    o = T22()
+    try:
+        o.m(5)
+    except KeyError:
+        assert len(get_narration()) == 1, "We should have have a single narration line"
+
+
+def test23():
+    """
+    test23: check that the 'check' option works for functions
+    """
+    reset_all_narrations()
+    set_narration_options(auto_prune=False, check=True)
+
+    @narrate(lambda v: "Entering f1 with {}".format(v))
+    def f1(x):
+        return f2(x * 2)
+
+    @narrate(lambda v: "Entering f2 with {}".format(v))
+    def f2(y):
+        y += 2
+        return y
+
+    a = f1(5)
+    assert a == 12, "Unexpected value for a: {}".format(a)
+    frags = copy_narration()
+    assert len(frags) == 2, "Expected 2 fragments, got {}".format(len(frags))
+    tof0 = frags[0].text_or_func
+    assert "f1" in tof0, "the name 'f1' wasn't in the fragment: {}".format(tof0)
+    assert "5" in tof0, "the value 5 isn't in the fragment: {}".format(tof0)
+    tof1 = frags[1].text_or_func
+    assert "f2" in tof1, "the name 'f2' wasn't in the fragment: {}".format(tof1)
+    assert "10" in tof1, "the value 10 wasn't int he fragment: {}".format(tof1)
+    reset_all_narrations()
+    set_narration_options(auto_prune=True, check=False)
+
+
+def test24():
+    """
+    test24: check that the 'check' option works for context managers
+    """
+    reset_all_narrations()
+    set_narration_options(auto_prune=False, check=True)
+
+    initial = 5
+    with narrate_cm(lambda v: "Exiting c1 with {}".format(v), initial):
+        initial *= 2
+        with narrate_cm(lambda w: "Exiting c2 with {}".format(w), initial):
+            initial += 2
+
+    assert initial == 12, "Unexpected value for initial: {}".format(initial)
+    frags = copy_narration()
+    assert len(frags) == 2, "Expected 2 fragments, got {}".format(len(frags))
+    tof0 = frags[0].text_or_func
+    assert "c1" in tof0, "the name c1 wasn't in the fragment: {}".format(tof0)
+    assert "5" in tof0, "the value 5 wasn't in the fragment: {}".format(tof0)
+    tof1 = frags[1].text_or_func
+    assert "c2" in tof1, "the name c2 wasn't int he fragment: {}".format(tof1)
+    assert "10" in tof1, "the value 10 wasn't in the fragment: {}".format(tof1)
+    reset_all_narrations()
+    set_narration_options(auto_prune=True, check=False)
+
+
 def do_all():
     for k, v in sorted(globals().items()):
         if callable(v) and k.startswith("test"):

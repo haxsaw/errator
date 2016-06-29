@@ -41,10 +41,53 @@ del _X
 _expected_attrs = _func_attrs.union(_unbound_meth_attrs).union(_gen_attrs)
 
 
+_default_options = {"auto_prune": True,
+                    "check": False}
+
+
+def set_default_options(auto_prune=None, check=None):
+    """
+    Sets default options that are applied to each per-narration thread
+    :param auto_prune: optional, boolean, defaults to True. If not specified, then don't
+        change the existing value of the auto_prune default option. Otherwise, set the
+        default value to the boolean interpretation of auto_prune.
+
+        auto_prune tells errator whether or not to remove narration fragments upon successful
+        returns from a function/method or exits from a context. If set to False, fragments
+        are retained on returns/exits, and it is up to the user entirely to manage the fragment
+        stack using reset_narration().
+    :param check: optional, boolean, defaults to False. If not specified, then don't change
+        the existing value. Otherwise, set the default value to the boolean interpretation of
+        check.
+
+        The check option changes the logic around fragment text generation. Normally, fragments
+        only get their text generated in the case of an exception in a decorated function/method
+        or context. When check is True, the fragment's text is always generated when the function/
+        method or context finishes, regardless if there's an exception. This is particularly handy
+        in testing for the cases where narrate() or narrate_cm() have been given a callable
+        instead of a string-- the callable will be invoked every time instead of just when there's
+        an exception, allowing you to make sure that the callable operates properly and itself
+        won't be a source of errors (which may manifest themselves as exceptions raised within
+        errator itself). The check option should normally be False, as there's a performance penalty
+        to pay for always generating fragment text.
+    :return: dict of default options.
+    """
+    if auto_prune is not None:
+        _default_options["auto_prune"] = bool(auto_prune)
+    if check is not None:
+        _default_options["check"] = bool(check)
+
+    return dict(_default_options)
+
+
 class ErratorDeque(deque):
-    def __init__(self, iterable=(), auto_prune=True):
+    def __init__(self, iterable=(), auto_prune=None, check=None):
         super(ErratorDeque, self).__init__(iterable=iterable)
-        self.auto_prune = auto_prune
+        self.__dict__.update(_default_options)
+        if auto_prune is not None:
+            self.auto_prune = auto_prune
+        if check is not None:
+            self.check = check
 
     def pop_until_true(self, f):
         """
@@ -84,7 +127,9 @@ class NarrationFragment(object):
 
     @classmethod
     def clone(cls, src):
-        new = cls(src.text_or_func, *src.args, **src.kwargs)
+        new = cls(src.text_or_func,
+                  *src.args if src.args is not None else (),
+                  **src.kwargs if src.kwargs is not None else {})
         new.context = src.context
         new.exception_text = src.exception_text
         new.calling = src.calling
@@ -136,6 +181,8 @@ class NarrationFragmentContextManager(NarrationFragment):
         if exc_type is None:
             # then all went well; pop ourselves off the end
             self.status = self.COMPLETED
+            if d.check:
+                _ = self.format()
             if d and d.auto_prune:
                 d.pop_until_true(lambda item: item.calling == item)
             self.calling = None  # break ref cycle
@@ -199,14 +246,33 @@ def reset_narration(thread=None, from_here=False):
                 d.clear()
 
 
-def set_narration_options(thread=None, auto_prune=True):
+def set_narration_options(thread=None, auto_prune=None, check=None):
     """
     Set options for capturing narration for the current thread.
 
     :param thread: threading.Thread object. If not supplied, the current thread is used
-    :param auto_prune: boolean. determines if narration fragments are to be automatically
-        removed upon successful return of a function of exit of a context manager's context.
-        Default is True (prune successful fragments).
+    :param auto_prune: optional, boolean, defaults to True. If not specified, then don't
+        change the existing value of the auto_prune option. Otherwise, set the
+        value to the boolean interpretation of auto_prune.
+
+        auto_prune tells errator whether or not to remove narration fragments upon successful
+        returns from a function/method or exits from a context. If set to False, fragments
+        are retained on returns/exits, and it is up to the user entirely to manage the fragment
+        stack using reset_narration().
+    :param check: optional, boolean, defaults to False. If not specified, then don't change
+        the existing value. Otherwise, set the value to the boolean interpretation of
+        check.
+
+        The check option changes the logic around fragment text generation. Normally, fragments
+        only get their text generated in the case of an exception in a decorated function/method
+        or context. When check is True, the fragment's text is always generated when the function/
+        method or context finishes, regardless if there's an exception. This is particularly handy
+        in testing for the cases where narrate() or narrate_cm() have been given a callable
+        instead of a string-- the callable will be invoked every time instead of just when there's
+        an exception, allowing you to make sure that the callable operates properly and itself
+        won't be a source of errors (which may manifest themselves as exceptions raised within
+        errator itself). The check option should normally be False, as there's a performance penalty
+        to pay for always generating fragment text.
     """
     if thread is None:
         thread = threading.current_thread()
@@ -215,9 +281,17 @@ def set_narration_options(thread=None, auto_prune=True):
     try:
         d = _thread_fragments[thread.name]
     except KeyError:
-        _thread_fragments[thread.name] = ErratorDeque(auto_prune=auto_prune)
+        _thread_fragments[thread.name] = ErratorDeque(auto_prune=bool(auto_prune)
+                                                      if auto_prune is not None
+                                                      else None,
+                                                      check=bool(check)
+                                                      if check is not None
+                                                      else None)
     else:
-        d.auto_prune = auto_prune
+        if auto_prune is not None:
+            d.auto_prune = bool(auto_prune)
+        if check is not None:
+            d.check = bool(check)
 
 
 def copy_narration(thread=None, from_here=False):
@@ -326,6 +400,8 @@ def narrate(str_or_func):
             try:
                 _v = m(*args, **kwargs)
                 fragment.status = fragment.COMPLETED
+                if frag_deque.check:
+                    _ = fragment.format()
                 if frag_deque and frag_deque.auto_prune:
                     frag_deque.pop_until_true(lambda item: item.calling == fragment.calling)
                 fragment = None
@@ -376,4 +452,4 @@ def narrate_cm(text_or_func, *args, **kwargs):
 
 __all__ = ("narrate", "narrate_cm", "copy_narration", "NarrationFragment", "NarrationFragmentContextManager",
            "reset_all_narrations", "reset_narration", "get_narration", "set_narration_options",
-           "ErratorException")
+           "ErratorException", "set_default_options")
