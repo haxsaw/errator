@@ -10,7 +10,7 @@ setup(
     author="Tom Carroll",
     author_email="actuator@pobox.com",
     url="https://github.com/haxsaw/errator",
-    download_url="https://github.com/haxsaw/errator/tarball/0.1",
+    download_url="https://github.com/haxsaw/errator/tarball/0.1.2",
     keywords=["exception", "logging", "traceback", "stacktrace"],
     classifiers=[],
 )
