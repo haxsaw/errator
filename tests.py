@@ -13,7 +13,7 @@ def test01():
     :return:
     """
     the_text = "some text"
-    sf = NarrationFragment(the_text)
+    sf = NarrationFragment(the_text, test01)
     assert the_text in sf.tell(), "The text we supplied wasn't in the fragment's output"
 
 
@@ -27,7 +27,7 @@ def test02():
     def f(a1, kw1=""):
         return "f:{} {}".format(a1, kw1)
 
-    sf = NarrationFragment(f, "callable", kw1="text")
+    sf = NarrationFragment(f, test02, "callable", kw1="text")
     assert text in sf.tell(), "The callable didn't manage to return the expected string"
 
 
@@ -662,6 +662,26 @@ def test28():
         assert False, "We shouldn't have gotten a KeyError"
     else:
         assert False, "we should have gotten an exception"
+
+
+def test29():
+    """
+    test29: check basic verbose=True narration fetching
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("calling f")
+    def f():
+        raise Exception("oops")
+
+    try:
+        f()
+        assert False, "there should have been an exception"
+    except Exception as _:
+        stuff = get_narration(verbose=True)
+        assert stuff, "there should have been a narration"
+
 
 def do_all():
     for k, v in sorted(globals().items()):

@@ -1,6 +1,8 @@
 import threading
 from collections import deque
 import inspect
+import traceback
+import sys
 
 __version__ = "0.1.3"
 
@@ -105,9 +107,11 @@ class ErratorDeque(deque):
         one_true = any([f(o) for o in self])
         if one_true:
             while self and not f(self[-1]):
-                self.pop()
+                inst = self.pop()
+                inst.__class__.return_instance(inst)
             if self:
-                self.pop()
+                inst = self.pop()
+                inst.__class__.return_instance(inst)
         return
 
 
@@ -117,7 +121,36 @@ class NarrationFragment(object):
     PASSEDTHRU_EXCEPTION = 3
     COMPLETED = 4
 
-    def __init__(self, text_or_func, *args, **kwargs):
+    _free_instances = deque()
+
+    @classmethod
+    def get_instance(cls, text_or_func, narrated_callable, *args, **kwargs):
+        try:
+            inst = cls._free_instances.pop()
+            assert isinstance(inst, NarrationFragment)
+            inst._reset(text_or_func, narrated_callable, *args, **kwargs)
+        except IndexError:
+            inst = cls(text_or_func, narrated_callable, *args, **kwargs)
+        return inst
+
+    @classmethod
+    def return_instance(cls, inst):
+        inst._reset(None, None)
+        cls._free_instances.append(inst)
+
+    def __init__(self, text_or_func, narrated_callable, *args, **kwargs):
+        """
+        Creates a new NarrationFragment that will report using the supplied text or func
+        :param text_or_func: either a string or a callable with the same signature as the
+            callable being decorated
+        :param narrated_callable: the callable being decorated or None. If supplied, then
+            the callable will be inspected and some metadata on it will be saved
+        :param args: possibly empty sequence of additional arguments
+        :param kwargs: possibly empty dictionary of keyword arguments
+        """
+        self._reset(text_or_func, narrated_callable, *args, **kwargs)
+
+    def _reset(self, text_or_func, narrated_callable, *args, **kwargs):
         self.text_or_func = text_or_func
         self.args = args
         self.kwargs = kwargs if kwargs else {}
@@ -125,30 +158,67 @@ class NarrationFragment(object):
         self.exception_text = None
         self.calling = None
         self.status = self.IN_PROCESS
+        if narrated_callable:
+            self.func_name = narrated_callable.__name__
+            self.source_file = inspect.getsourcefile(narrated_callable)
+        else:
+            self.func_name = None
+            self.source_file = None
+        self.lineno = None
+
+    def frame_describes_func(self, frame):
+        """
+        returns True if the supplied tuple from inspect.stack/trace matches the
+        function and file name for this fragment
+        :param frame:
+        :return:
+        """
+        return self.func_name == frame[3] and self.source_file == frame[1]
+
+    def annotate_fragment(self, frame):
+        """
+        Extract relevant info from supplied FrameInfo object
+        :param frame:
+        :return:
+        """
+        self.lineno = frame[2]
 
     @classmethod
     def clone(cls, src):
-        new = cls(src.text_or_func,
+        new = cls(src.text_or_func, None,
                   *src.args if src.args is not None else (),
                   **src.kwargs if src.kwargs is not None else {})
         new.context = src.context
         new.exception_text = src.exception_text
         new.calling = src.calling
+        new.func_name = src.func_name
+        new.source_file = src.source_file
+        new.lineno = src.lineno
         return new
 
-    def format(self):
+    def format(self, verbose=False):
         tale = (self.text_or_func(*self.args, **self.kwargs)
                 if callable(self.text_or_func)
                 else self.text_or_func)
-        self.text_or_func = tale
+
         self.args = self.kwargs = None
+
         if self.exception_text:
             tale = "{}, but {} was raised".format(tale, self.exception_text)
+            self.exception_text = None
+        self.text_or_func = tale
 
-        return tale
+        if verbose and self.func_name:
+            result = "\n".join([tale, "  line %s in %s, %s" % (str(self.lineno),
+                                                               str(self.func_name),
+                                                               str(self.source_file))])
+        else:
+            result = tale
 
-    def tell(self):
-        tale = self.format()
+        return result
+
+    def tell(self, verbose=False):
+        tale = self.format(verbose=verbose)
         return tale
 
     def fragment_context(self, context=None):
@@ -165,8 +235,10 @@ class NarrationFragment(object):
 
 
 class NarrationFragmentContextManager(NarrationFragment):
-    def format(self):
-        tale = super(NarrationFragmentContextManager, self).format()
+    _free_instances = deque()
+
+    def format(self, verbose=False):
+        tale = super(NarrationFragmentContextManager, self).format(verbose=verbose)
         return "    {}".format(tale)
 
     def __enter__(self):
@@ -198,6 +270,7 @@ class NarrationFragmentContextManager(NarrationFragment):
             self.calling = None  # break ref cycle
         else:
             if d[-1] is self:
+                # this is where the exception was raised
                 self.fragment_exception_text(exc_type, str(exc_val))
                 self.status = self.RAISED_EXCEPTION
             else:
@@ -237,7 +310,7 @@ def reset_narration(thread=None, from_here=False):
         from the fragment nearest the current stack frame to the fragment where the exception occurred.
         This is useful if you have auto_prune set to False for this thread's narration and you want
         to clean up the fragments for which you may have previously retrieved the narration using
-        get_narration_text().
+        get_narration().
     """
     if thread is None:
         thread = threading.current_thread()
@@ -268,7 +341,8 @@ def set_narration_options(thread=None, auto_prune=None, check=None):
     """
     Set options for capturing narration for the current thread.
 
-    :param thread: threading.Thread object. If not supplied, the current thread is used
+    :param thread: threading.Thread object. If not supplied, the current thread is used.
+        Identifies the thread whose narration will be impacted by the options.
     :param auto_prune: optional, boolean, defaults to True. If not specified, then don't
         change the existing value of the auto_prune option. Otherwise, set the
         value to the boolean interpretation of auto_prune.
@@ -319,7 +393,7 @@ def copy_narration(thread=None, from_here=False):
 
     This method returns a list of NarrationFragment objects that capture all the narration
     fragments for the current narration for a specific thread. The actual narration can then
-    be cleared, but this list will be uneffected.
+    be cleared, but this list will be unaffected.
     :param thread: optional, instance of threading.Thread. If unspecified, the current thread is used.
     :param from_here: boolean, optional, default False. If True, then the list of fragments returned is
         from the narration fragment nearest the active stack frame and down to the exception origin, not
@@ -350,7 +424,7 @@ def copy_narration(thread=None, from_here=False):
     return l
 
 
-def get_narration(thread=None, from_here=False):
+def get_narration(thread=None, from_here=False, verbose=False):
     """
     Return a list of strings, each one a narration fragment in the function call path.
 
@@ -367,6 +441,9 @@ def get_narration(thread=None, from_here=False):
         this to prune the narration. Use in conjuction with the auto_prune option set to False to allow
         several stack frames to return before collecting the narration (be sure to manually clean up
         the narration when auto_prune is False).
+    :param verbose: boolean, optional, default False. If True, then the returned list of strings will
+        information on file, function, and line number. These more verbose strings will have an embedded
+        \n to split the lines into two.
     :return: list of formatted strings.
     """
     if thread is None:
@@ -377,14 +454,14 @@ def get_narration(thread=None, from_here=False):
     if not d:
         l = []
     elif not from_here:
-        l = [nf.tell() for nf in d]
+        l = [nf.tell(verbose=verbose) for nf in d]
     else:
         # collect from the last IN_PROCESS fragment to the exception
         l = []
         for i in range(-1, -1 * len(d) - 1, -1):
             if d[i].status == NarrationFragment.IN_PROCESS:
                 for j in range(i, 0, 1):
-                    l.append(d[j].tell())
+                    l.append(d[j].tell(verbose=verbose))
                 break
     return l
 
@@ -396,13 +473,13 @@ def narrate(str_or_func):
 
     :param str_or_func: either a string that will be captured and rendered if the function
         fails, or else a callable with the same signature as the function/method that is
-        being decorated that will only be called if the function/method raises and exception;
+        being decorated that will only be called if the function/method raises an exception;
         in this case, the callable will be invoked with the (possibly modified) arguments
         that were passed to the function. The callable must return a string, and that will
         be used for the string that describes the execution of the function/method
 
         NOTE: if a callable is passed in, it will only be called with the decorated
-        function's arguments if the decorated function raises and exception during
+        function's arguments if the decorated function raises an exception during
         execution. This way no time is spent formatting a string that may not be needed.
         However, if the decorated function has changed the value of any of the arguments
         and these are in turn used in formatting the narration string, be aware that these
@@ -410,7 +487,7 @@ def narrate(str_or_func):
     """
     def capture_stanza(m):
         def narrate_it(*args, **kwargs):
-            fragment = NarrationFragment(str_or_func, *args, **kwargs)
+            fragment = NarrationFragment.get_instance(str_or_func, m, *args, **kwargs)
             fragment.calling = m
             tname = threading.current_thread().name
             frag_deque = _thread_fragments.setdefault(tname, ErratorDeque())
@@ -425,14 +502,30 @@ def narrate(str_or_func):
                         raise ErratorException("Failed formatting the fragment for function {}; "
                                                "received exception {}, '{}'".format(m, type(e), str(e)))
                 if frag_deque and frag_deque.auto_prune:
-                    frag_deque.pop_until_true(lambda item: item.calling == fragment.calling)
+                    frag_deque.pop_until_true(lambda item: item.calling == m)
                 fragment = None
                 return _v
             except Exception as e:
+                fragment.fragment_context()
                 if fragment is frag_deque[-1]:
                     # only grab the exception text if this is the last fragment on the call chain
                     fragment.fragment_exception_text(e.__class__, str(e))
                     fragment.status = fragment.RAISED_EXCEPTION
+                    tb = inspect.trace()
+                    stack = inspect.stack()
+                    stack.reverse()
+                    sc = deque(stack + tb[1:])
+                    deck = deque(frag_deque)
+                    while deck and sc:
+                        while sc and not deck[-1].frame_describes_func(sc[-1]):
+                            sc.pop()
+                        if sc:
+                            deck[-1].annotate_fragment(sc[-1])
+                            while deck and isinstance(deck[-1], NarrationFragmentContextManager):
+                                deck.pop()
+                            if deck and deck[-1].frame_describes_func(sc[-1]):
+                                deck.pop()
+                            sc.pop()
                 else:
                     fragment.status = fragment.PASSEDTHRU_EXCEPTION
                 try:
@@ -472,7 +565,7 @@ def narrate_cm(text_or_func, *args, **kwargs):
         keyword arguments are ignored.
     :return: An errator context manager (NarrationFragmentContextManager)
     """
-    ifsf = NarrationFragmentContextManager(text_or_func, *args, **kwargs)
+    ifsf = NarrationFragmentContextManager.get_instance(text_or_func, None, *args, **kwargs)
     return ifsf
 
 

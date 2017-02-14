@@ -2,7 +2,17 @@
 Using Errator
 #############
 
-Errator is a fairly small library that's easy to wrap your head around. While basic
+#. `If you don't ready anything else, READ THIS <#if-you-don-t-read-anything-else-read-this>`__
+#. `Errator's operation <#errator-s-operation>`__
+#. `Capturing the narration <#capturing-the-narration>`__
+#. `Skipping decorating functions <#skipping-decorating-functions>`__
+#. `Customizing the narration <#customizing-the-narration>`__
+#. `Getting more details with contexts <#getting-more-details-with-contexts>`__
+#. `Advanced fragment access <#advanced-fragment-access>`__
+#. `Testing and debugging <#testing-and-debugging>`__
+#. `Usage tips <#usage-tips>`__
+
+Errator is a fairly small library (one file) that's easy to wrap your head around. While basic
 usage is fairly simple, errator also allows you more sophisticated uses in multi-threaded
 programs where each thread can have its own exception narration, as well as being able to
 manage partial narrations.
@@ -18,9 +28,8 @@ errator.
     be used to decorate methods. For brevity, when 'function' is used it should be assumed to
     mean 'function or method'.
 
-******************************************
 If you don't read anything else, READ THIS
-******************************************
+------------------------------------------
 
 Errator decorators, context managers, and narration management functions work together to
 manage a set of per-thread stacks of "narration fragments". In "normally" operating code (that is, with no
@@ -42,7 +51,7 @@ There are two anti-patterns that can lead to this situation to be aware of.
 Anti-pattern #1-- catching the exception outside of errator's view
 --------------------------------------------------------------------------------------------
 
-If you catch an exception in a function that errator hasn't decorated (and there are no more
+If you catch an exception in a function that hasn't been decorated with errator decorators (and there are no more
 errator-decorated functions or contexts at a more global level in the call stack), it will leak narration
 fragments and the narration will grow, making it useless:
 
@@ -80,7 +89,7 @@ You can fix this a couple of ways:
 
     # this approach will cause errator to automatically clean fragments:
 
-    @narrate("I'm starting f1")
+    @narrate("I'm starting f1")  # we added decoration to the ``f1()`` function
     def f1():
         "NOTE: NOW decorated with 'narrate()'"
         try:
@@ -127,7 +136,7 @@ You can fix this a couple of ways:
     f1()
 
 -----------------------------------------------------------------------------
-Anti-pattern #2: Shutting off automatic cleanup but don't clean up fragments.
+Anti-pattern #2: Shutting off automatic cleanup but not clearing up fragments
 -----------------------------------------------------------------------------
 
 For more complex uses of errator, you can turn off automatic fragment cleanup, but if
@@ -195,13 +204,12 @@ this is like the second solution to the first anti-pattern:
 Here, we've simply called ``reset_narration()`` after the narration text has been acquired, and
 this gets rid of all fragments for the thread.
 
-*******************
 Errator's Operation
-*******************
+-------------------
 
 Let's look at an example of a set of functions that can be decorated with errator's
-``narrate()`` decorator. Let's suppose we have a set of functions f1 through f6, where
-f1 calls f2, f2 calls f3, and so forth. If we stopped in the debugger in f6, Python
+``narrate()`` decorator. Let's suppose we have a set of functions ``f1`` through ``f6``, where
+``f1`` calls ``f2``, ``f2`` calls ``f3``, and so forth. If we stopped in the debugger in ``f6``, Python
 would report the stack like so:
 
 +-------+------------------+
@@ -222,8 +230,8 @@ would report the stack like so:
 
 When we decorate functions with ``narrate()``, additional stack frames are added to
 the trace; we won't show those here, but instead will show what fragments are managed
-as the execution progresses. Here's the retained narration fragments if f1..f6 are all decorated with
-``narrate()`` and the current function is f4:
+as the execution progresses. Here's the retained narration fragments if ``f1..f6`` are all decorated with
+``narrate()`` and the current function is ``f4``:
 
 +-------+------------------+---------------------+
 |  func |  execution point | fragments for funcs |
@@ -241,7 +249,7 @@ as the execution progresses. Here's the retained narration fragments if f1..f6 a
 |    f6 |                  |                     |
 +-------+------------------+---------------------+
 
-When f4 returns, the fragments are:
+When ``f4`` returns, the fragments are:
 
 +-------+------------------+---------------------+
 |  func |  execution point | fragments for funcs |
@@ -259,12 +267,12 @@ When f4 returns, the fragments are:
 |    f6 |                  |                     |
 +-------+------------------+---------------------+
 
-Note that the fragment for f4 is removed.
+Note that the fragment for ``f4`` is removed.
 
 Now suppose that we have an exception in
-f6, but the exception isn't captured until f3, at which point the exception is caught and
+``f6``, but the exception isn't captured until ``f3``, at which point the exception is caught and
 doesn't propagate up the stack any further. This next table shows the
-fragments present as the functions either return or the exception propagates upward:
+fragments present as the functions either return and the exception propagates upward:
 
 +-------+------------------+---------------------+
 |  func |  execution point | fragments for funcs |
@@ -282,20 +290,76 @@ fragments present as the functions either return or the exception propagates upw
 |    f6 | exception raised | f1,f2,f3,f4,f5,f6   |
 +-------+------------------+---------------------+
 
-Notice that in f3 where the exception is handled we still have all the fragments for all
+Notice that in ``f3`` where the exception is handled we still have all the fragments for all
 stack frames between the exception origin and the handler, but once the handler returns and
 errator sees that the exception isn't propagating further it removes the fragments that are
-no longer useful in narrating an exception (this makes f3 a good place to acquire the
+no longer useful in narrating an exception (this makes ``f3`` a good place to acquire the
 narration for the exception; more on that later).
 
------------------------------
+Capturing the narration
+-----------------------
+
+Let's repeat the example from earlier, where we said that a function caught an exception and
+processed it in ``f3``:
+
++-------+------------------+---------------------+
+|  func |  execution point | fragments for funcs |
++=======+==================+=====================+
+|    f1 | normal return    | f1                  |
++-------+------------------+---------------------+
+|    f2 | normal return    | f1,f2               |
++-------+------------------+---------------------+
+|    f3 | exc handled      | f1,f2,f3,f4,f5,f6   |
++-------+------------------+---------------------+
+|    f4 | exc passes thru  | f1,f2,f3,f4,f5,f6   |
++-------+------------------+---------------------+
+|    f5 | exc passes thru  | f1,f2,f3,f4,f5,f6   |
++-------+------------------+---------------------+
+|    f6 | exception raised | f1,f2,f3,f4,f5,f6   |
++-------+------------------+---------------------+
+
+If ``f3`` catches the exception, it's probably a good place to grab the exception narration
+(this isn't required, but it may be a natural place). Suppose ``f3()`` looks like the following:
+
+.. code-block::
+
+    @narrate("While I was running f3")
+    def f3():
+        try:
+            f4()
+        except MyException:
+            story = get_narration()
+
+In the ``except`` clause, we call ``get_narration()`` to acquire a list of strings that are
+the narration for the exception. This will return the entire narration that exists for this
+call stack; that is, it will give a list of narration fragment strings for ``f1()`` through ``f6()``.
+
+But perhaps the whole narration isn't wanted; perhaps all that's desired is the narration for
+``f3()`` through ``f6()``, as the the narrations before this point actually make the exception narration less
+clear. You can trim your narration down with by calling ``get_narration()`` with the keyword
+argument ``from_here`` set to True:
+
+.. code-block::
+
+    @narrate("While I was running f3...")
+    def f3():
+        try:
+            f4()
+        except MyException:
+            story = get_narration(from_here=True)
+
+This will only return the narration strings from the current function to the function that's
+the source of the exception, in this case ``f3()`` through ``f6()``. The ``from_here`` argument allows
+you to control how much narration is returned from ``get_narration()``. It defaults to False,
+meaning to return the entire narration.
+
 Skipping decorating functions
 -----------------------------
 
 What happens if you skip decorating some functions in a calling sequence? Nothing much;
 errator simply won't have anything in it's narration for that function. Below, we indicate a
-decorated function with an '(e)' before the function name, and skip decoration of some
-functions. When we get to f5, the captured fragments are as shown:
+decorated function with an ``(e)`` before the function name, and skip decoration of some
+functions. When we get to ``f5``, the captured fragments are as shown:
 
 +-------+------------------+---------------------+
 |  func |  execution point | fragments for funcs |
@@ -313,65 +377,6 @@ functions. When we get to f5, the captured fragments are as shown:
 |    f6 |                  |                     |
 +-------+------------------+---------------------+
 
------------------------
-Capturing the narration
------------------------
-
-Let's repeat an example earlier, where we said that a function caught an exception and
-processed it:
-
-+-------+------------------+---------------------+
-|  func |  execution point | fragments for funcs |
-+=======+==================+=====================+
-|    f1 | normal return    | f1                  |
-+-------+------------------+---------------------+
-|    f2 | normal return    | f1,f2               |
-+-------+------------------+---------------------+
-|    f3 | exc handled      | f1,f2,f3,f4,f5,f6   |
-+-------+------------------+---------------------+
-|    f4 | exc passes thru  | f1,f2,f3,f4,f5,f6   |
-+-------+------------------+---------------------+
-|    f5 | exc passes thru  | f1,f2,f3,f4,f5,f6   |
-+-------+------------------+---------------------+
-|    f6 | exception raised | f1,f2,f3,f4,f5,f6   |
-+-------+------------------+---------------------+
-
-If f3 catches the exception, it's probably a good place to grab the exception narration
-(this isn't required, but it may be a natural place). Suppose f3() looks like the following:
-
-.. code-block::
-
-    @narrate("While I was running f3")
-    def f3():
-        try:
-            f4()
-        except MyException:
-            story = get_narration()
-
-In the ``except`` clause, we call ``get_narration()`` to acquire a list of strings that are
-the narration for the exception. This will return the entire narration that exists for this
-call stack; that is, it will give a list of narration fragment strings for f1() through f6().
-
-But perhaps the narration isn't wanted; perhaps all that's desired is the narration for
-f3() through f6(), as the the narrations before this point actually make the exception narration less
-clear. You can trim your narration down with by calling ``get_narration()`` with the keyword
-argument ``from_here`` set to True:
-
-.. code-block::
-
-    @narrate("While I was running f3...")
-    def f3():
-        try:
-            f4()
-        except MyException:
-            story = get_narration(from_here=True)
-
-This will only return the narration strings from the current function to the function that's
-the source of the exception, in this case f3() through f6(). The ``from_here`` argument allows
-you to control how much narration is returned from ``get_narration()``. It defaults to False,
-meaning to return the entire narration.
-
--------------------------
 Customizing the narration
 -------------------------
 
@@ -403,7 +408,6 @@ But you can supply any callable that can cope with the argument list to the deco
 function. This allows your narrations to provide more details regarding the calling context
 of a particular function, since actual argument values can become part of the narration.
 
-----------------------------------
 Getting more details with contexts
 ----------------------------------
 
@@ -445,10 +449,90 @@ web service call, the string is retained, but when reported the string will be i
 show that the narration fragment is within the scope of the function's narration.
 
 The second use of ``narrate_cm()`` passes a lambda as its callable. But unlike passing a callable to
-``narrate()``, you must also supply the arguments to give the callable, in this
+``narrate()``, you must also supply the arguments to give the callable to ``narrate_cm()``, in this
 case the local variable ws2_req. This is because the context manager doesn't know what is import relative
-to the context-- the function arguments or the local variables. You may pass both positional and keyword
-arguments to ``narrate_cm()``. Again, the returned string will be indented a few spaces to indicate that it
-is within the scope of the enclosing function.
+to the context-- the function arguments or the local variables. You may pass both postional and keyword
+arguments to ``narrate_cm()``.
 
+Advanced fragment access
+------------------------
+
+Errator provides a way to get copies of the actual objects where narration fragments are stored. There are
+a number of situation where this is useful:
+
+- if more control over fragment formatting is required
+- if retention of the details of an error narration is required
+- you're just that way
+
+You can get these objects by using the ``copy_narration()`` function. Instead of returning a list of strings like ``get_narration()`` does, this function returns a list of ``NarrationFragment``
+objects which are copies of the
+objects managed by errator itself. The ``copy_narration()`` function takes the same ``thread`` and
+``from_here`` arguments as does ``get_narration()``, so you can control what objects are returned in
+the same manner. Useful methods on these objects are:
+
+- ``tell()``, which returns a string that is the fragment's part of the overall narration
+- ``tell_ex()``, similar to ``tell()`` but provides more contextual information (not fully implemented)
+- ``fragment_exception_text()``, which returns a string that describes the actual exception; really
+  only useful on the last fragment in the call chain
+
+Being a lower-level object, you should expect its interface to be a bit more volatile, and should stick
+with calling ``tell()`` if you wish to be isolated from change.
+
+
+Testing and debugging
+---------------------
+
+As errator is meant to help you make sense when something goes wrong, it would be a shame if something
+went wrong while errator was doing its thing. But since errator users can supply a callable to ``narrate()``
+and ``narrate_cm()``, there's the possibility that an error lurks in the callable itself, and errator could raise
+an exception in trying to tell you about an exception. Worse, if there is a bug in a callable, you'd only know
+about it if an exception is raised, which may be difficult to force in testing, or may escape testing and only
+show up in production.
+
+To help you find problems earlier, errator provides an option that changes the rules regarding when fragments,
+and hence callables, are formatted. By adding:
+
+.. code-block::
+
+    set_default_options(check=True)
+
+Before entering an errator decorated function or managed context, you inform errator that you wish to
+check the generation of every narration fragment, whether there's been an exception raised or not. You can
+also set the 'check' option on an existing narration's thread with:
+
+.. code-block::
+
+    set_narration_options(check=True)
+
+which will set fragment checking only for the current thread's narration (or the thread named with the ``thread=``
+argument; see the documentation for ``set_narration_options()`` for details).
+
+When the ``check`` option is True, every time a decorated function returns or a managed context exits, errator
+formats the narration fragment, including calling any callable supplied to exercise the code it refers to.
+By setting check to True in your testing code, you can be sure that every narration fragment is generated,
+and hence every callable for a fragment is invoked. This helps you ensure that you have the correct number of
+arguments to your callable and raises confidence that the callable will operate correctly in a real exception
+situation (this isn't a guarantee, however, as the conditions that raise an exception my be different from
+those in testing).
+
+.. note::
+
+    You don't want to run production code with ``check`` set to True (it defaults to False). This is because
+    doing so incurs the execution time of every callable where the check==True applies, which can have
+    significant performance impact on your code. Errator normally only invokes the callable if there's an
+    exception, thus sparing your code from the call overhead and extra execution time. So be sure not have
+    the check option set True in production.
+
+Usage tips
+----------
+
+* When decorating a method with ``narrate()`` and supplying a callable, don't forget to include the ``self`` argument
+  in the callable's argument list.
+
+* Decorating generator functions gives unexpected results; the function will return immediately with the
+  generator as the value, hence the narration fragment will not be retained. If you wish to get narration for
+  generator functions, you need to use the ``narrate_cm()`` context manager within the generator to accomplish this.
+
+* At the moment, behavior with coroutines has not been investigated, but almost certainly the current release
+  will do surprising things. This will need further investigation.
 
