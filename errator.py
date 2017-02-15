@@ -209,9 +209,13 @@ class NarrationFragment(object):
         self.text_or_func = tale
 
         if verbose and self.func_name:
-            result = "\n".join([tale, "  line %s in %s, %s" % (str(self.lineno),
-                                                               str(self.func_name),
-                                                               str(self.source_file))])
+            if self.lineno is not None:
+                result = "\n".join([tale, "  line %s in %s, %s" % (str(self.lineno),
+                                                                   str(self.func_name),
+                                                                   str(self.source_file))])
+            else:
+                result = "\n".join([tale, "%s in %s" % (str(self.func_name),
+                                                        str(self.source_file))])
         else:
             result = tale
 
@@ -237,6 +241,12 @@ class NarrationFragment(object):
 class NarrationFragmentContextManager(NarrationFragment):
     _free_instances = deque()
 
+    def __init__(self, *args, **kwargs):
+        super(NarrationFragmentContextManager, self).__init__(*args, **kwargs)
+        calling_frame = inspect.stack()[3]
+        self.func_name = calling_frame[3]
+        self.source_file = calling_frame[1]
+
     def format(self, verbose=False):
         tale = super(NarrationFragmentContextManager, self).format(verbose=verbose)
         return "    {}".format(tale)
@@ -250,7 +260,7 @@ class NarrationFragmentContextManager(NarrationFragment):
 
     def __exit__(self, exc_type, exc_val, _):
         tname = threading.current_thread().name
-        d = _thread_fragments[tname]
+        d = _thread_fragments.setdefault(tname, ErratorDeque())
         if exc_type is None:
             # then all went well; pop ourselves off the end
             self.status = self.COMPLETED
@@ -273,6 +283,23 @@ class NarrationFragmentContextManager(NarrationFragment):
                 # this is where the exception was raised
                 self.fragment_exception_text(exc_type, str(exc_val))
                 self.status = self.RAISED_EXCEPTION
+                # the following code annotates fragments with stack trace information
+                # so if verbose output is requesting it can be included
+                tb = inspect.trace()
+                stack = inspect.stack()
+                stack.reverse()
+                sc = deque(stack + tb)  # NOTE: slightly different than for func decorators!
+                deck = deque(d)
+                while deck and sc:
+                    while sc and not deck[-1].frame_describes_func(sc[-1]):
+                        sc.pop()
+                    if sc:
+                        deck[-1].annotate_fragment(sc[-1])
+                        while deck and isinstance(deck[-1], NarrationFragmentContextManager):
+                            deck.pop()
+                        if deck and deck[-1].frame_describes_func(sc[-1]):
+                            deck.pop()
+                        sc.pop()
             else:
                 self.status = self.PASSEDTHRU_EXCEPTION
             try:
@@ -511,6 +538,8 @@ def narrate(str_or_func):
                     # only grab the exception text if this is the last fragment on the call chain
                     fragment.fragment_exception_text(e.__class__, str(e))
                     fragment.status = fragment.RAISED_EXCEPTION
+                    # the following code annotates fragments with stack trace information
+                    # so if verbose output is requesting it can be included
                     tb = inspect.trace()
                     stack = inspect.stack()
                     stack.reverse()

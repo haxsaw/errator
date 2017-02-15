@@ -683,6 +683,216 @@ def test29():
         assert stuff, "there should have been a narration"
 
 
+# this next batch of functions is in support of testing
+# verbose narration
+
+@narrate(lambda x: "f1 called with %s" % x)
+def f1(arg):
+    if arg == "f1":
+        raise Exception("in f1")
+    f2(arg)
+
+
+@narrate(lambda x: "f2 called with %s" % x)
+def f2(arg):
+    if arg == "f2":
+        raise Exception("in f2")
+    f3(arg)
+
+
+def f3(arg):
+    if arg == "f3":
+        raise Exception("in f3")
+    f4(arg)
+
+
+@narrate(lambda x: "f4 called with %s" % x)
+def f4(arg):
+    if arg == "f4":
+        raise Exception("in f4")
+    with narrate_cm(lambda x: "cm1 in f4 with %s" % x, arg) as cm1:
+        if arg == "f4@cm1":
+            raise Exception("in f4@cm1")
+        f5(arg)
+
+
+def f5(arg):
+    if arg == "f5":
+        raise Exception("in f5")
+    with narrate_cm(lambda x: "cm2 in f5 with %s" % x, arg) as cm2:
+        if arg == "f5@cm2":
+            raise Exception("in f5@cm2")
+        f6(arg)
+
+
+@narrate(lambda x: "f6 called with %s" % x)
+def f6(arg):
+    if arg == "f6":
+        raise Exception("in f6")
+
+
+def count_nones(lines):
+    return sum(1 for x in lines if "None" in x)
+
+
+def test30():
+    """
+    test30: checking that basic processing doesn't crater on it's own
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f6")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "f6" in str(e), "got an unexpected exception: %s" % str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 6, "unexpected number of strings: %s" % str(lines)
+
+
+def test31():
+    """
+    test31: checking verbose output from raise in f1
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f1")
+        assert False, "this should have raised"
+    except Exception:
+        lines = get_narration(verbose=True)
+        assert len(lines) == 1, "got the following lines: %s" % str(lines)
+        assert "f1 called with f1" in lines[0], "returned line contains: %s" % lines[0]
+        assert "\n" in lines[0], "no newline in: %s" % lines[0]
+        assert not count_nones(lines)
+
+
+def test32():
+    """
+    test32: checking verbose output from raise in f2
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f2")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f2" in str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 2, "got the following lines: %s" % str(lines)
+        assert "f2 called with f2" in lines[-1], "last line contains: %s" % lines[-1]
+        assert "\n" in lines[0] and "\n" in lines[1], "newline missing: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test33():
+    """
+    test33: checking verbose output from raise in f3
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f3")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f3" in str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 2, "got the following lines: %s" % str(lines)
+        assert "f2 called with f3" in lines[-1], "last line contains: %s" % lines[-1]
+        assert "\n" in lines[0] and "\n" in lines[1], "newline missing: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test34():
+    """
+    test34: checking verbose output from raise in f4
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f4")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f4" in str(e), "wrong exception message: %s" % str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 3, "got the following lines: %s" % str(lines)
+        assert "f4 called with f4" in lines[-1], "last line contains: %s" % lines[-1]
+        assert 3 == sum(1 for x in lines if "\n" in x), "newline missing: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test34cm1():
+    """
+    test34cm1: checking verbose output from a context manager in f4
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f4@cm1")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "f4@cm1" in str(e), "Unexpected text in exception: %s" % str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 4, "got the following lines: %s" % str(lines)
+        assert "cm1 in f4 with f4@cm1" in lines[-1], "last line contains: %s" % lines[-1]
+        assert 4 == sum(1 for x in lines if "\n" in x), "wrong number of newlines: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test35():
+    """
+    test35: checking verbose output from f5
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f5")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f5" in str(e), "wrong exception value: %s" % str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 4, "got the following lines: %s" % str(lines)
+        assert "cm1 in f4 with f5" in lines[-1], "last line contains: %s" % lines[-1]
+        assert 4 == sum(1 for x in lines if "\n" in x), "wrong number of newlines: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test35cm2():
+    """
+    test35cm2: checking verbose output from f5 at cm2
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f5@cm2")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f5@cm2" in str(e), "wrong exception value: %s" % str(e)
+        lines = get_narration(verbose=True)
+        assert len(lines) == 5, "got the following lines: %s" % str(lines)
+        assert "cm2 in f5 with f5@cm2" in lines[-1], "last line contains: %s" % lines[-1]
+        assert 5 == sum(1 for x in lines if "\n" in x), "wrong number of newlines: %s" % str(lines)
+        assert not count_nones(lines)
+
+
+def test36():
+    """
+    test36: checking verbose output from f6
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+    try:
+        f1("f6")
+        assert False, "this should have raised"
+    except Exception as e:
+        assert "in f6" in str(e), "wrong value in exception"
+        lines = get_narration(verbose=True)
+        assert len(lines) == 6, "wrong number of lines: %s" % len(lines)
+        assert "f6 called with f6" in lines[-1], "last line is: %s" % lines[-1]
+        assert 6 == sum(1 for x in lines if "\n" in x), "wrong number of newlines: %s" % str(lines)
+        assert not count_nones(lines)
+
+
 def do_all():
     for k, v in sorted(globals().items()):
         if callable(v) and k.startswith("test"):
