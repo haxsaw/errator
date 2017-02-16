@@ -9,7 +9,9 @@ Using Errator
 #. `Customizing the narration <#customizing-the-narration>`__
 #. `Getting more details with contexts <#getting-more-details-with-contexts>`__
 #. `Advanced fragment access <#advanced-fragment-access>`__
+#. `Verbose narrations <#verbose-narrations>`__
 #. `Testing and debugging <#testing-and-debugging>`__
+#. `Tidying up stack traces <#tidying-up-stack-traces>`__
 #. `Usage tips <#usage-tips>`__
 
 Errator is a fairly small library (one file) that's easy to wrap your head around. While basic
@@ -478,6 +480,60 @@ the same manner. Useful methods on these objects are:
 Being a lower-level object, you should expect its interface to be a bit more volatile, and should stick
 with calling ``tell()`` if you wish to be isolated from change.
 
+Verbose narrations
+------------------
+
+The story errator tells is meant to be user-focused; that is, from the perspective of a program's semantics rather than from that of a stack trace. However, there may be circumstances where it would be helpful to have some of the information in a stack trace merged into the rendered narration. Errator supports this with the ``verbose`` keyword on the ``get_narration()`` function. It defaults to ``False``, but if set to ``True``, then each retrieved narration line will be followed by a line that reports the line number, function, and source file associated with the narration fragment.
+
+Consider this narrated program in a file named verbose.py:
+
+.. code-block::
+
+    from errator import narrate_cm, narrate, get_narration
+
+    @narrate("So I started to 'f1'...")
+    def f1():
+        f2()
+
+    @narrate("...which occasioned me to 'f2'")
+    def f2():
+        with narrate_cm("during which I started a narration context..."):
+            f3()
+
+    @narrate("...and that led me to finally 'f3'")
+    def f3():
+        raise Exception("oops")
+
+    if __name__ == "__main__":
+        try:
+            f1()
+        except:
+            for l in get_narration(verbose=False):
+                print(l)
+
+Which yields the following output when run:
+
+.. code-block::
+
+    So I started to 'f1'...
+    ...which occasioned me to 'f2'
+      during which I started a narration context...
+    ...and that led me to finally 'f3', but exception type: Exception, value: 'oops' was raised
+
+If we set ``verbose=True`` in the ``get_narration()`` call, then the output looks like the following:
+
+.. code-block::
+
+    So I started to 'f1'...
+        line 5 in f1, /home/tom/errator/docs/verbose.py
+    ...which occasioned me to 'f2'
+        line 10 in f2, /home/tom/errator/docs/verbose.py
+      during which I started a narration context...
+           line 10 in f2, /home/tom/errator/docs/verbose.py
+    ...and that led me to finally 'f3', but exception type: Exception, value: 'oops' was raised
+        line 14 in f3, /home/tom/errator/docs/verbose.py
+
+...thus letting you see the actual lines being executed when the exception is raised.
 
 Testing and debugging
 ---------------------
@@ -522,6 +578,26 @@ those in testing).
     significant performance impact on your code. Errator normally only invokes the callable if there's an
     exception, thus sparing your code from the call overhead and extra execution time. So be sure not have
     the check option set True in production.
+
+Tidying up stack traces
+-----------------------
+
+Errator's ``narrate()`` decorator wraps the function being decorated, which means that if you use the various stack and traceback reporting functions in the standard ``traceback`` module, you can get materially longer traces than you'd otherwise like. If you'd rather not see these, errator supplies a set of wrapper functions that are analogs of the functions in ``traceback`` that strip out the errator calls from returned objects or printed stack traces. These functions are all argument-compatible with the functions in ``traceback``. Specifically, errator provides analogs to:
+
+- extract_tb
+- extract_stack
+- format_tb
+- format_stack
+- format_exception_only
+- format_exception
+- print_tb
+- print_exception
+- print_exc
+- format_exc
+- print_last
+- print_stack
+
+...all of which remove traces of errator from the stacks output.
 
 Usage tips
 ----------

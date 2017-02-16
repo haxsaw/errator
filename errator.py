@@ -3,8 +3,12 @@ from collections import deque
 import inspect
 import traceback
 import sys
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
 
-__version__ = "0.1.3"
+__version__ = "0.2"
 
 
 class ErratorException(Exception):
@@ -210,7 +214,7 @@ class NarrationFragment(object):
 
         if verbose and self.func_name:
             if self.lineno is not None:
-                result = "\n".join([tale, "  line %s in %s, %s" % (str(self.lineno),
+                result = "\n".join([tale, "    line %s in %s, %s" % (str(self.lineno),
                                                                    str(self.func_name),
                                                                    str(self.source_file))])
             else:
@@ -249,7 +253,10 @@ class NarrationFragmentContextManager(NarrationFragment):
 
     def format(self, verbose=False):
         tale = super(NarrationFragmentContextManager, self).format(verbose=verbose)
-        return "    {}".format(tale)
+        parts = tale.split("\n")
+        parts = [" " * (i + 2) + parts[i] for i in range(len(parts))]
+        return "\n".join(parts)
+        # return "    {}".format(tale)
 
     def __enter__(self):
         tname = threading.current_thread().name
@@ -295,11 +302,12 @@ class NarrationFragmentContextManager(NarrationFragment):
                         sc.pop()
                     if sc:
                         deck[-1].annotate_fragment(sc[-1])
-                        while deck and isinstance(deck[-1], NarrationFragmentContextManager):
-                            deck.pop()
-                        if deck and deck[-1].frame_describes_func(sc[-1]):
-                            deck.pop()
-                        sc.pop()
+                        deck.pop()
+                        # while deck and isinstance(deck[-1], NarrationFragmentContextManager):
+                        #     deck.pop()
+                        # if deck and deck[-1].frame_describes_func(sc[-1]):
+                        #     deck.pop()
+                        # sc.pop()
             else:
                 self.status = self.PASSEDTHRU_EXCEPTION
             try:
@@ -468,7 +476,7 @@ def get_narration(thread=None, from_here=False, verbose=False):
         this to prune the narration. Use in conjuction with the auto_prune option set to False to allow
         several stack frames to return before collecting the narration (be sure to manually clean up
         the narration when auto_prune is False).
-    :param verbose: boolean, optional, default False. If True, then the returned list of strings will
+    :param verbose: boolean, optional, default False. If True, then the returned list of strings will include
         information on file, function, and line number. These more verbose strings will have an embedded
         \n to split the lines into two.
     :return: list of formatted strings.
@@ -533,13 +541,12 @@ def narrate(str_or_func):
                 fragment = None
                 return _v
             except Exception as e:
-                fragment.fragment_context()
                 if fragment is frag_deque[-1]:
                     # only grab the exception text if this is the last fragment on the call chain
                     fragment.fragment_exception_text(e.__class__, str(e))
                     fragment.status = fragment.RAISED_EXCEPTION
                     # the following code annotates fragments with stack trace information
-                    # so if verbose output is requesting it can be included
+                    # so if verbose output is requested it can be included
                     tb = inspect.trace()
                     stack = inspect.stack()
                     stack.reverse()
@@ -550,11 +557,12 @@ def narrate(str_or_func):
                             sc.pop()
                         if sc:
                             deck[-1].annotate_fragment(sc[-1])
-                            while deck and isinstance(deck[-1], NarrationFragmentContextManager):
-                                deck.pop()
-                            if deck and deck[-1].frame_describes_func(sc[-1]):
-                                deck.pop()
-                            sc.pop()
+                            deck.pop()
+                            # while deck and isinstance(deck[-1], NarrationFragmentContextManager):
+                            #     deck.pop()
+                            # if deck and deck[-1].frame_describes_func(sc[-1]):
+                            #     deck.pop()
+                            # sc.pop()
                 else:
                     fragment.status = fragment.PASSEDTHRU_EXCEPTION
                 try:
@@ -569,6 +577,9 @@ def narrate(str_or_func):
         narrate_it.__dict__.update(m.__dict__)
         return narrate_it
     return capture_stanza
+
+
+_magic_name = "narrate_it"
 
 
 def narrate_cm(text_or_func, *args, **kwargs):
@@ -598,6 +609,153 @@ def narrate_cm(text_or_func, *args, **kwargs):
     return ifsf
 
 
+# Traceback sanitizers
+# errator leaves a bunch of cruft in the stack trace when an exception occurs; this cruft
+# appears when you use the various functions in the standard traceback module. The following
+# functions provide analogs to a number of the functions in traceback, but they filter
+# out the internal function calls to errator functions.
+
+def extract_tb(tb, limit=None):
+    """
+    behaves like traceback.extract_tb, but removes errator functions from the trace
+    :param tb: traceback to process
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a list of 4-tuples containing (filename, line number, function name, text)
+    """
+    return [f for f in traceback.extract_tb(tb, limit) if f[2] != _magic_name]
+
+
+def extract_stack(f=None, limit=None):
+    """
+    behaves like traceback.extract_stack, but removes errator functions from the trace
+    :param f: optional; specifies an alternate stack frame to start at
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a list of 4-tuples containing (filename, line number, function name, text)
+    """
+    return [f for f in traceback.extract_stack(f, limit) if f[2] != _magic_name]
+
+
+def format_tb(tb, limit=None):
+    """
+    behaves like traceback.format_tb, but removes errator functions from the trace
+    :param tb: The traceback you wish to format
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a list of formatted strings for the trace
+    """
+    return traceback.format_list(extract_tb(tb, limit))
+
+
+def format_stack(f=None, limit=None):
+    """
+    behaves like traceback.format_stack, but removes errator functions from the trace
+    :param f: optional; specifies an alternate stack frame to start at
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a list of formatted strings for the trace
+    """
+    return traceback.format_list(extract_stack(f, limit))
+
+
+format_exception_only = traceback.format_exception_only
+
+
+def format_exception(etype, evalue, tb, limit=None):
+    """
+    behaves like traceback.format_exception, but removes errator functions from the trace
+    :param etype: exeption type
+    :param evalue: exception value
+    :param tb: traceback to print; these are the values returne by sys.exc_info()
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a list of formatted strings for the trace
+    """
+    tb = format_tb(tb, limit)
+    exc = format_exception_only(etype, evalue)
+    return tb + exc
+
+
+def print_tb(tb, limit=None, file=sys.stderr):
+    """
+    behaves like traceback.print_tb, but removes errator functions from the trace
+    :param tb: traceback to print; these are the values returne by sys.exc_info()
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :param file: optional; open file-like object to write() to; if not specified defaults to sys.stderr
+    """
+    for l in format_tb(tb, limit):
+        file.write(l.decode() if hasattr(l, "decode") else l)
+    file.flush()
+
+
+def print_exception(etype, evalue, tb, limit=None, file=sys.stderr):
+    """
+    behaves like traceback.print_exception, but removes errator functions from the trace
+    :param etype: exeption type
+    :param evalue: exception value
+    :param tb: traceback to print; these are the values returne by sys.exc_info()
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :param file: optional; open file-like object to write() to; if not specified defaults to sys.stderr
+    """
+    for l in format_exception(etype, evalue, tb, limit):
+        file.write(l.decode() if hasattr(l, "decode") else l)
+    file.flush()
+
+
+def print_exc(limit=None, file=sys.stderr):
+    """
+    behaves like traceback.print_exc, but removes errator functions from the trace
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :param file: optional; open file-like object to write() to; if not specified defaults to sys.stderr
+    """
+    etype, evalue, tb = sys.exc_info()
+    print_exception(etype, evalue, tb, limit, file)
+
+
+def format_exc(limit=None):
+    """
+    behaves like traceback.format_exc, but removes errator functions from the trace
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :return: a string containing the formatted exception and traceback
+    """
+    f = StringIO()
+    print_exc(limit, f)
+    return f.getvalue()
+
+
+def print_last(limit=None, file=sys.stderr):
+    """
+    behaves like traceback.print_last, but removes errator functions from the trace. As noted
+    in the man page for traceback.print_last, this will only work when an exception has reached the
+    interactive prompt
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :param file: optional; open file-like object to write() to; if not specified defaults to sys.stderr
+    """
+    print_exception(getattr(sys, "last_type", None), getattr(sys, "last_value", None),
+                    getattr(sys, "last_traceback", None), limit, file)
+
+
+def print_stack(f=None, limit=None, file=sys.stderr):
+    """
+    behaves like traceback.print_stack, but removes errator functions from the trace.
+    :param f: optional; specifies an alternate stack frame to start at
+    :param limit: optional; int. The number of stack frame entries to return; the actual
+        number returned may be lower once errator calls are removed
+    :param file: optional; open file-like object to write() to; if not specified defaults to sys.stderr
+    """
+    for l in format_stack(f, limit):
+        file.write(l.decode() if hasattr(l, "decode") else l)
+    file.flush()
+
+
 __all__ = ("narrate", "narrate_cm", "copy_narration", "NarrationFragment", "NarrationFragmentContextManager",
            "reset_all_narrations", "reset_narration", "get_narration", "set_narration_options",
-           "ErratorException", "set_default_options")
+           "ErratorException", "set_default_options", "extract_tb", "extract_stack", "format_tb",
+           "format_stack", "format_exception_only", "format_exception", "print_tb", "print_exception",
+           "print_exc", "format_exc", "print_last", "print_stack")

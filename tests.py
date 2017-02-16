@@ -2,9 +2,12 @@ import traceback
 import sys
 import threading
 from collections import deque
-from errator import (narrate, NarrationFragment, _thread_fragments, reset_all_narrations,
-                     narrate_cm, copy_narration, reset_narration,
-                     get_narration, set_narration_options, ErratorException)
+from errator import *
+from errator import (_thread_fragments,)
+try:
+    from io import StringIO
+except ImportError:
+    from cStringIO import StringIO
 
 
 def test01():
@@ -710,7 +713,7 @@ def f3(arg):
 def f4(arg):
     if arg == "f4":
         raise Exception("in f4")
-    with narrate_cm(lambda x: "cm1 in f4 with %s" % x, arg) as cm1:
+    with narrate_cm(lambda x: "cm1 in f4 with %s" % x, arg):
         if arg == "f4@cm1":
             raise Exception("in f4@cm1")
         f5(arg)
@@ -891,6 +894,208 @@ def test36():
         assert "f6 called with f6" in lines[-1], "last line is: %s" % lines[-1]
         assert 6 == sum(1 for x in lines if "\n" in x), "wrong number of newlines: %s" % str(lines)
         assert not count_nones(lines)
+
+
+def test37():
+    """
+    test37: check that calling get_narration() more than once returns the same exception data
+    each time
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("Calling f")
+    def f(i):
+        raise Exception("test37")
+
+    try:
+        f(1)
+        assert False, "should have raised"
+    except Exception:
+        l1 = get_narration()
+        l2 = get_narration()
+        assert len(l1) == 1, "got $%s lines" % len(l1)
+        assert l1[0] == l2[0], "get_narration() returns different data in sequential calls"
+        assert "test37" in l1[0], "narration doesn't appear to contain detail on exception"
+
+
+to_find = "narrate_it"
+
+
+def test38():
+    """
+    test38; check that extract_tb works properly
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+        assert False, "should have raised"
+    except:
+        et, ev, tb = sys.exc_info()
+        tb_lines = extract_tb(tb)
+        assert not any(True for x in tb_lines if to_find in x[2]), "found a narrate_it"
+
+
+def test39():
+    """
+    test39: check that extract_stack works properly
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("in f")
+    def f():
+        return extract_stack()
+
+    stack_lines = f()
+    assert not any(True for x in stack_lines if to_find in x[2]), "found a narrate_it"
+
+
+def test40():
+    """
+    test40: check that format_tb works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+        assert False, "should have raised"
+    except:
+        _, _, tb = sys.exc_info()
+        tb_lines = format_tb(tb)
+        assert not any(True for x in tb_lines if to_find in x), "found a narrate_it"
+
+
+def test41():
+    """
+    test41: check that format_stack works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("in f")
+    def f():
+        return format_stack()
+
+    stack_lines = f()
+    assert not any(True for x in stack_lines if to_find in x), "found a %s" % to_find
+
+
+def test42():
+    """
+    test42: check that format_exception works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        lines = format_exception(*sys.exc_info())
+        assert not any(True for x in lines if to_find in x), "found a %s" % to_find
+
+
+def test43():
+    """
+    test43: check that print_tb works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        _, _, tb = sys.exc_info()
+        f = StringIO()
+        print_tb(tb, file=f)
+        result = f.getvalue()
+        assert to_find not in result
+
+
+def test44():
+    """
+    test44: check that print_exception works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        et, ev, tb = sys.exc_info()
+        f = StringIO()
+        print_exception(et, ev, tb, file=f)
+        result = f.getvalue()
+        assert to_find not in result
+
+
+def test45():
+    """
+    test45: check that print_exc works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        f = StringIO()
+        print_exc(file=f)
+        result = f.getvalue()
+        assert to_find not in result
+
+
+def test46():
+    """
+    test46: check that format_exc works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        stuff = format_exc()
+        assert to_find not in stuff
+
+
+def test47():
+    """
+    test47: check that print_last works
+
+    NOTE: this may not have meaningful results due to limitations in traceback.print_last
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    try:
+        f1("f6")
+    except:
+        pass
+    f = StringIO()
+    print_last(file=f)
+    result = f.getvalue()
+    assert to_find not in result
+
+
+def test48():
+    """
+    test48: check that print_stack works
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("test48")
+    def f():
+        f = StringIO()
+        print_stack(file=f)
+        return f.getvalue()
+
+    result = f()
+    assert to_find not in result
 
 
 def do_all():
