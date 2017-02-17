@@ -1,0 +1,157 @@
+<h1 id="errator">Errator</h1>
+<p>Provide human-readable error narration of exception tracebacks with Errator.</p>
+<ol>
+<li><a href="#what-s-new-in-0-2">What's new in 0.2</a></li>
+<li><a href="#intro">Intro</a></li>
+<li><a href="#how-it-works">How it works</a></li>
+<li><a href="#requirements">Requirements</a></li>
+<li><a href="#installing">Installing</a></li>
+<li><a href="#quick-tutorial">Quick Tutorial</a></li>
+</ol>
+<h2 id="whats-new-in-0.2">What's new in 0.2</h2>
+<ul>
+<li>The <code>get_narration()</code> now has a new keyword argument, &quot;verbose&quot; (default False), that when True returns expanded narration information that includes the line number, function, and file name of the point in the stack trace that the narration applies to.</li>
+<li>To provide a more tidy display of stack information, errator now has analogs of the functions from the standard <code>traceback</code> module that filter out errator-based calls from the call stack, leaving only application calls in the display of stack traces.</li>
+<li>Narration output formatting has been modified slightly.</li>
+</ul>
+<h2 id="intro">Intro</h2>
+<p>Errator came as an idea on the back of trying to figure out what the semantics of an exception traceback are in non-trivial pieces of code.</p>
+<p>When an exception occurs deep inside a call stack within some generic utility function that is used in numerous contexts, reading the traceback is often not helpful in determine the source of the problem. Data values aren't obvious, and the initial starting conditions of the error can't easily been seen.</p>
+<p>Logging is a step in the right direction, but in general outputs too much information; often, there is lots of info regarding error-free processing in the log, making it hard to find the right log output that is associated with the error.</p>
+<p>Errator is something of a marriage between logging and tracebacks: plain text messages that are associated directly with the call trail that led to an exception. Errator works by providing tools that let you state intent of code in text, but only captures that text when an exception bubbles up the stack. You can then acquire this &quot;error narration&quot; and display it to your user in the most appropriate fashion.</p>
+<h2 id="how-it-works">How it works</h2>
+<p>Errator uses decorators and context managers to maintain a stack of &quot;narration fragments&quot; behind the scenes. When code executes without exceptions, these fragments are created and thrown away as narrated code executes and returns. However, when an exception is raised, the narration fragments are retained and their content can be retrieved. Fragments can be automatically discarded (pruned) when an exception doesn't propagate any further up the stack, or can be discarded under user control, allowing more control over the content of &quot;narration&quot; provided for the exception.</p>
+<p>Errator is thread-safe, allowing you to capture separate error narrations for independent threads of control through the same code.</p>
+<h2 id="requirements">Requirements</h2>
+<p>Errator doesn't have any external dependencies. It is compatible with Python 2.7 and 3.x.</p>
+<h2 id="installing">Installing</h2>
+<p>Errator is a single file, and can be installed either with pip or running 'python setup.py install' after pulling the Git project.</p>
+<h2 id="quick-tutorial">Quick Tutorial</h2>
+<p>The next section discusses Errator with functions, but you can also use the decorators described with methods too.</p>
+<p>Start with pulling errator into your module that you want to narrate:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="im">from</span> errator <span class="im">import</span> <span class="op">*</span></code></pre></div>
+<p>Now, suppose you have a utility function that performs some specialized string formatting, but it is possible to pass in arguments that cause a exception to be raised. Your function is called all over the place for a variety of different reasons, often very deep down the call stack where it isn't obvious what the original functional intent was, or where the source of bad arguments may have been.</p>
+<p>To start building the narration to your function's execution, you can use the <code>narrate()</code> decorator to associate a bit of text with your utility function to provide easily understandable explanations about what's going on:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@narrate</span>(<span class="st">&quot;I&#39;m trying to format a string&quot;</span>)
+<span class="kw">def</span> special_formatter(fmt_string, <span class="op">**</span>kwargs):
+    <span class="co"># magic format code that sometimes raises an exception</span></code></pre></div>
+<p>The <code>narrate()</code> decorator knows to look for exceptions and doesn't impede their propagation, but captures that bit of text in an internal stack when an exception occurs. So if you write:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="cf">try</span>:
+    s <span class="op">=</span> special_formatter(fmt, <span class="op">**</span>args)
+exception <span class="pp">Exception</span>:
+    the_tale <span class="op">=</span> get_narration()</code></pre></div>
+<p>...and <code>special_formatter()</code> raises an exception, the exception will still bubble up the stack, but <code>get_narration()</code> will return a list of strings for all the <code>narrate()</code>-decorated functions down to the exception. If no exception is raised, there are no strings (well, it's a little more complicated than that, but we'll get to that).</p>
+<p>Maybe you'd like some insight as to the arguments present when an exception is raised so you can better tell what's causing it. Instead of a string, you can supply the <code>narrate()</code> decorator with a callable that has the same signature as the function being decorated. This callable will be invoked only if the decorated function raises an exception, and gets invoked with the same arguments that the function was:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@narrate</span>(<span class="kw">lambda</span> fs, <span class="op">**</span>kw: <span class="st">&quot;I&#39;m trying to format a string with &#39;</span><span class="sc">%s</span><span class="st">&#39; and args &#39;</span><span class="sc">%s</span><span class="st">&#39;&quot;</span> <span class="op">%</span> (fs, <span class="bu">str</span>(kw)))
+<span class="kw">def</span> special_formatter(fmt_string, <span class="op">**</span>kwargs):
+    <span class="co"># magic format code that sometimes raises an exception</span></code></pre></div>
+<p>The lambda passed to narrate() will only be called when <code>special_formatter()</code> raises an exception, otherwise it will go un-executed.</p>
+<p>Now, perhaps <code>special_formatter()</code> is a rather long function, and you'd like to be able to narrate it's operation in more detail to get better narrations when things go wrong. You can use the <code>narrate_cm()</code> context manager to create a narration fragment for a block of code. If everything goes well in the block, then the fragment is discarded, but the fragment will be retained if an exception occurs:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="kw">def</span> special_formatter(fmt_string, <span class="op">**</span>kwargs):
+    <span class="cf">for</span> format_token <span class="op">in</span> parse_format(fmt_string):
+        <span class="cf">if</span> format_token.<span class="bu">type</span> <span class="op">==</span> <span class="bu">float</span>:
+            <span class="cf">with</span> narrate_cm(<span class="st">&quot;I started processing a float format&quot;</span>):
+                <span class="co"># do magic stuff for floats...</span>
+        <span class="cf">elif</span> format_token.<span class="bu">type</span> <span class="op">==</span> <span class="bu">int</span>:
+            <span class="cf">with</span> narrate_cm(<span class="st">&quot;I started processing an int format&quot;</span>):
+                <span class="co"># do magic stuff for ints...</span></code></pre></div>
+<p>Narration fragments added with <code>narrate_cm()</code> are treated just like those created by the function decorator-- they are added to the stack, and silently removed if the context manager's code block exits normally. But exceptions raised in the context block are retained as the exception propagates back through the stack.</p>
+<p>Like <code>narrate()</code>, <code>narrate\_cm()</code> allows you to supply a callable instead of a string:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="cf">with</span> narrate_cm(<span class="kw">lambda</span> x: <span class="st">&quot;I started processing an int with format </span><span class="sc">%s</span><span class="st">&quot;</span> <span class="op">%</span> x, format_token.<span class="bu">format</span>):
+    <span class="co"># format code</span></code></pre></div>
+<p>...and again, this callable will only be invoked if an exception is raised in the context. Unlike <code>narrate()</code>, however, you are free to define a callable with any signature, as long as you supply the arguments needed as well to invoke the callable if need be.</p>
+<p>Context managers may nest, and in fact any combination of function decorator and context manager will work as expected.</p>
+<p>Let's look at an example with more complex calling relationships. Suppose we have functions <code>A</code>, <code>B</code>, <code>C</code>, <code>D</code>, <code>E</code>, and <code>F</code>. They have the following calling relationships:</p>
+<ul>
+<li><code>A</code> calls <code>B</code> then <code>C</code></li>
+<li><code>B</code> calls <code>D</code></li>
+<li><code>C</code> calls <code>E</code> or <code>F</code></li>
+<li><code>D</code> calls <code>F</code></li>
+</ul>
+<p>We'll make it so that if we're unlucky enough to call <code>E</code>, we'll get an exception raised. This will happen only for input values of <code>A</code> greater than 10.</p>
+<p>So let's define these functions and narrate them-- paste these into an interactive Python session after you've imported errator:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to A with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> A(val):
+    B(val <span class="op">/</span> <span class="dv">2</span>)
+    C(val <span class="op">*</span> <span class="dv">2</span>)
+
+<span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to B with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> B(val):
+    D(val <span class="op">*</span> <span class="dv">10</span>)
+
+<span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to C with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> C(val):
+    <span class="cf">if</span> val <span class="op">&gt;</span> <span class="dv">20</span>:
+        E(val)
+    <span class="cf">else</span>:
+        F(val)
+
+<span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to D with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> D(val):
+    F(val <span class="op">*</span> <span class="dv">3</span>)
+
+<span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to E with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> E(val):
+    <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="st">&quot;how dare you call me with such a value?&quot;</span>)
+
+<span class="at">@narrate</span>(<span class="kw">lambda</span> v: <span class="st">&quot;I&#39;m trying to F with </span><span class="sc">%s</span><span class="st"> as input&quot;</span> <span class="op">%</span> v)
+<span class="kw">def</span> F(val):
+    <span class="bu">print</span>(<span class="st">&quot;very well&quot;</span>)</code></pre></div>
+<p>Now run <code>A</code> with a value less than 11, and look for narration text:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> A(<span class="dv">3</span>)
+very well
+very well
+<span class="op">&gt;&gt;&gt;</span> get_narration()
+[]
+<span class="op">&gt;&gt;&gt;</span> </code></pre></div>
+<p>Now run <code>A</code> with a value greater than 10:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> A(<span class="dv">11</span>)
+very well
+Traceback (most recent call last):
+  File <span class="st">&quot;&lt;stdin&gt;&quot;</span>, line <span class="dv">1</span>, <span class="op">in</span> <span class="op">&lt;</span>module<span class="op">&gt;</span>
+  File <span class="st">&quot;errator.py&quot;</span>, line <span class="dv">322</span>, <span class="op">in</span> callit
+    _v <span class="op">=</span> m(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+  File <span class="st">&quot;&lt;stdin&gt;&quot;</span>, line <span class="dv">4</span>, <span class="op">in</span> A
+  File <span class="st">&quot;errator.py&quot;</span>, line <span class="dv">322</span>, <span class="op">in</span> callit
+    _v <span class="op">=</span> m(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+  File <span class="st">&quot;&lt;stdin&gt;&quot;</span>, line <span class="dv">4</span>, <span class="op">in</span> C
+  File <span class="st">&quot;errator.py&quot;</span>, line <span class="dv">322</span>, <span class="op">in</span> callit
+    _v <span class="op">=</span> m(<span class="op">*</span>args, <span class="op">**</span>kwargs)
+  File <span class="st">&quot;&lt;stdin&gt;&quot;</span>, line <span class="dv">3</span>, <span class="op">in</span> E
+<span class="pp">ValueError</span>: how dare you call me <span class="cf">with</span> such a value?
+<span class="op">&gt;&gt;&gt;</span> </code></pre></div>
+<p>So far, it's as we'd expect, except perhaps for the inclusion of errator calls in the stack. But now let's look at the narration:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> <span class="cf">for</span> l <span class="op">in</span> get_narration():
+...     <span class="bu">print</span>(l)
+... 
+I<span class="st">&#39;m trying to A with 11 as input</span>
+<span class="st">I&#39;</span>m trying to C <span class="cf">with</span> <span class="dv">22</span> <span class="im">as</span> <span class="bu">input</span>
+I<span class="st">&#39;m trying to E with 22 as input, but exception type: ValueError, value: how dare you call me with such a value? was raised</span>
+<span class="st">&gt;&gt;&gt; </span></code></pre></div>
+<p>We have a narration for our recent exception. Now try the following:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> A(<span class="dv">8</span>)
+very well
+very well
+<span class="op">&gt;&gt;&gt;</span> get_narration()
+[<span class="st">&quot;I&#39;m trying to A with 11 as input&quot;</span>, <span class="st">&quot;I&#39;m trying to C with 22 as input&quot;</span>, <span class="co"># etc...</span></code></pre></div>
+<p>Wait, this didn't have an exception; why is there still narration? This is because an error narration only gets cleared out if a decorated function does NOT have an exception bubble up; the assumption is that the exception was caught and the narration was retrieved, so a decorated function that returns normally would remove the previous narration fragments. In our example, there is no function that is decorated with <code>narrate()</code> that catches the exception and returns normally, so the narration never clears out.</p>
+<p>There are a few ways to clear unwanted narrations: first is to manually clear the narration, and the other is to make sure you have a decorated function that catches the exception and returns normally, which will clear the narration automatically</p>
+<p>To manually clear narrations we call <code>reset_narration()</code>:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> reset_narration()
+<span class="op">&gt;&gt;&gt;</span> get_narration()
+<span class="op">&gt;&gt;&gt;</span> []</code></pre></div>
+<p>For the second, if we define a decorated function that calls A but which handles the exception and returns normally, the narration fragments will be cleaned up automatically:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="at">@narrate</span>(<span class="st">&quot;Handler for A&quot;</span>)
+<span class="kw">def</span> first(val):
+    <span class="cf">try</span>:
+        A(val)
+    <span class="cf">except</span>:
+        <span class="bu">print</span>(<span class="st">&quot;Got </span><span class="sc">%d</span><span class="st"> narration lines&quot;</span> <span class="op">%</span> <span class="bu">len</span>(get_narration()))</code></pre></div>
+<p>This outermost function still can retrieve the narration, but as it returns normally, the narration is cleared out when it returns:</p>
+<div class="sourceCode"><pre class="sourceCode python"><code class="sourceCode python"><span class="op">&gt;&gt;&gt;</span> first(<span class="dv">11</span>)
+very well
+Got <span class="dv">4</span> narration lines
+<span class="op">&gt;&gt;&gt;</span> get_narration()
+[]
+<span class="op">&gt;&gt;&gt;</span> </code></pre></div>
+<p>Errator provides finer degrees of control for getting the narration; these are covered in the <a href="using_errator.html">detailed docs</a>.</p>

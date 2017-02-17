@@ -597,7 +597,7 @@ Errator's ``narrate()`` decorator wraps the function being decorated, which mean
 - print_last
 - print_stack
 
-...all of which remove traces of errator from the stacks output.
+...all of which remove traces of errator from the output.
 
 Usage tips
 ----------

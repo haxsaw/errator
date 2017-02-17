@@ -3,11 +3,21 @@ Errator
 
 Provide human-readable error narration of exception tracebacks with Errator.
 
+#. `What's new in 0.2 <#what-s-new-in-0-2>`__
 #. `Intro <#intro>`__
 #. `How it works <#how-it-works>`__
 #. `Requirements <#requirements>`__
 #. `Installing <#installing>`__
 #. `Quick Tutorial <#quick-tutorial>`__
+
+What's new in 0.2
+-----------------
+
+- The ``get_narration()`` now has a new keyword argument, "verbose" (default False), that when True returns expanded narration information that includes the line number, function, and file name of the point in the stack trace that the narration applies to.
+
+- To provide a more tidy display of stack information, errator now has analogs of the functions from the standard ``traceback`` module that filter out errator-based calls from the call stack, leaving only application calls in the display of stack traces.
+
+- Narration output formatting has been modified slightly.
 
 Intro
 -----
