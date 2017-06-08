@@ -1,5 +1,5 @@
 import threading
-from collections import deque
+from collections import deque, defaultdict
 import inspect
 import traceback
 import sys
@@ -8,16 +8,70 @@ try:
 except ImportError:
     from io import StringIO
 
-__version__ = "0.2"
+__version__ = "0.2.1"
 
 
 class ErratorException(Exception):
     pass
 
 
+class ErratorDeque(deque):
+    def __init__(self, iterable=(), auto_prune=None, check=None):
+        super(ErratorDeque, self).__init__(iterable=iterable)
+        self.__dict__.update(_default_options)
+        if auto_prune is not None:
+            self.auto_prune = auto_prune
+        if check is not None:
+            self.check = check
+
+    def set_check(self, value):
+        """
+        sets the check flag to the provided boolean value
+        :param value: interpreted as a boolean value for self.check; if None don't change the value
+        :return: self
+        """
+        if value is not None:
+            self.check = bool(value)
+        else:
+            self.check = _default_options["check"]
+        return self
+
+    def set_auto_prune(self, value):
+        """
+        sets the auto_prune flag to the provided boolean value
+        :param value: interpreted as a boolean value for self.auto_prune; if None don't change the value
+        :return: self
+        """
+        if value is not None:
+            self.auto_prune = bool(value)
+        else:
+            self.auto_prune = _default_options["auto_prune"]
+        return self
+
+    def pop_until_true(self, f):
+        """
+        Performs pop(right) from the deque up to and including the element for which f returns True
+
+        This method tests the last element in the deque (right end) using the supplied function f.
+        If f returns False for the element, the element is popped and the test repeated for new last
+        element. If f returns True, that element is popped and the method returns. If f never returns
+        True, then all elements will be popped from the list.
+        :param f: callable of one argument, an item on the deque. Returns True if the item is the
+            last one to pop from the deque, False otherwise.
+        :return:
+        """
+        while self and not f(self[-1]):
+            inst = self.pop()
+            inst.__class__.return_instance(inst)
+        if self:
+            inst = self.pop()
+            inst.__class__.return_instance(inst)
+        return
+
+
 # _thread_fragments is hashed by a thread's name and contains a list StoryFragments for each frame
 # in the thread's call path
-_thread_fragments = {}
+_thread_fragments = defaultdict(ErratorDeque)
 
 
 def _x():
@@ -87,38 +141,6 @@ def set_default_options(auto_prune=None, check=None):
     return dict(_default_options)
 
 
-class ErratorDeque(deque):
-    def __init__(self, iterable=(), auto_prune=None, check=None):
-        super(ErratorDeque, self).__init__(iterable=iterable)
-        self.__dict__.update(_default_options)
-        if auto_prune is not None:
-            self.auto_prune = auto_prune
-        if check is not None:
-            self.check = check
-
-    def pop_until_true(self, f):
-        """
-        Performs pop(right) from the deque up to and including the element for which f returns True
-
-        This method tests the last element in the deque (right end) using the supplied function f.
-        If f returns False for the element, the element is popped and the test repeated for new last
-        element. If f returns True, that element is popped and the method returns. If f never returns
-        True, then all elements will be popped from the list.
-        :param f: callable of one argument, an item on the deque. Returns True if the item is the
-            last one to pop from the deque, False otherwise.
-        :return:
-        """
-        one_true = any([f(o) for o in self])
-        if one_true:
-            while self and not f(self[-1]):
-                inst = self.pop()
-                inst.__class__.return_instance(inst)
-            if self:
-                inst = self.pop()
-                inst.__class__.return_instance(inst)
-        return
-
-
 class NarrationFragment(object):
     IN_PROCESS = 1
     RAISED_EXCEPTION = 2
@@ -126,6 +148,8 @@ class NarrationFragment(object):
     COMPLETED = 4
 
     _free_instances = deque()
+
+    _callable_id_to_filename = {}
 
     @classmethod
     def get_instance(cls, text_or_func, narrated_callable, *args, **kwargs):
@@ -139,7 +163,6 @@ class NarrationFragment(object):
 
     @classmethod
     def return_instance(cls, inst):
-        inst._reset(None, None)
         cls._free_instances.append(inst)
 
     def __init__(self, text_or_func, narrated_callable, *args, **kwargs):
@@ -164,7 +187,11 @@ class NarrationFragment(object):
         self.status = self.IN_PROCESS
         if narrated_callable:
             self.func_name = narrated_callable.__name__
-            self.source_file = inspect.getsourcefile(narrated_callable)
+            ncid = id(narrated_callable)
+            sf = self._callable_id_to_filename.get(ncid)
+            if sf is None:
+                self._callable_id_to_filename[ncid] = sf = inspect.getsourcefile(narrated_callable)
+            self.source_file = sf
         else:
             self.func_name = None
             self.source_file = None
@@ -242,6 +269,10 @@ class NarrationFragment(object):
         return output
 
 
+def _pop_until_found_calling(item):
+    return item.calling == item
+
+
 class NarrationFragmentContextManager(NarrationFragment):
     _free_instances = deque()
 
@@ -260,14 +291,16 @@ class NarrationFragmentContextManager(NarrationFragment):
 
     def __enter__(self):
         tname = threading.current_thread().name
-        d = _thread_fragments.setdefault(tname, ErratorDeque())
-        d.append(self)
+        _thread_fragments[tname].append(self)
+        # d = _thread_fragments.setdefault(tname, ErratorDeque())
+        # d.append(self)
         self.calling = self
         return self
 
     def __exit__(self, exc_type, exc_val, _):
         tname = threading.current_thread().name
-        d = _thread_fragments.setdefault(tname, ErratorDeque())
+        d = _thread_fragments[tname]
+        # d = _thread_fragments.setdefault(tname, ErratorDeque())
         if exc_type is None:
             # then all went well; pop ourselves off the end
             self.status = self.COMPLETED
@@ -283,7 +316,7 @@ class NarrationFragmentContextManager(NarrationFragment):
                                                                                           fname, lineno))
 
             if d and d.auto_prune:
-                d.pop_until_true(lambda item: item.calling == item)
+                d.pop_until_true(_pop_until_found_calling)
             self.calling = None  # break ref cycle
         else:
             if d[-1] is self:
@@ -407,7 +440,9 @@ def set_narration_options(thread=None, auto_prune=None, check=None):
         raise ErratorException("the 'thread' argument isn't an instance of threading.Thread: {}".format(thread))
     try:
         d = _thread_fragments[thread.name]
+        d.set_auto_prune(auto_prune).set_check(check)
     except KeyError:
+        # this should never happen now that _thread_fragments is a defaultdict
         _thread_fragments[thread.name] = ErratorDeque(auto_prune=bool(auto_prune)
                                                       if auto_prune is not None
                                                       else None,
@@ -525,7 +560,8 @@ def narrate(str_or_func):
             fragment = NarrationFragment.get_instance(str_or_func, m, *args, **kwargs)
             fragment.calling = m
             tname = threading.current_thread().name
-            frag_deque = _thread_fragments.setdefault(tname, ErratorDeque())
+            # frag_deque = _thread_fragments.setdefault(tname, ErratorDeque())
+            frag_deque = _thread_fragments[tname]
             frag_deque.append(fragment)
             try:
                 _v = m(*args, **kwargs)
