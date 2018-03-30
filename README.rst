@@ -3,12 +3,27 @@ Errator
 
 Provide human-readable error narration of exception tracebacks with Errator.
 
-#. `What's new in 0.2 <#what-s-new-in-0-2>`__
+#. `What's new in 0.2.1 <#what-s-new-in-0-2-1>`__
 #. `Intro <#intro>`__
 #. `How it works <#how-it-works>`__
 #. `Requirements <#requirements>`__
 #. `Installing <#installing>`__
 #. `Quick Tutorial <#quick-tutorial>`__
+
+What's new in 0.2.1
+-------------------
+
+This patch release addresses certain performance issues:
+
+- Patched a bug that caused too many object creations to occur
+
+- Removed some redundant resetting of state in narration fragment objects
+
+- Added caching of filenames for fucntion objects so that lookups aren't always required
+
+- Sped up the resetting process
+
+-
 
 What's new in 0.2
 -----------------

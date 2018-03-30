@@ -8,7 +8,7 @@ try:
 except ImportError:
     from io import StringIO
 
-__version__ = "0.2.1"
+__version__ = "0.3"
 
 
 class ErratorException(Exception):
@@ -292,15 +292,12 @@ class NarrationFragmentContextManager(NarrationFragment):
     def __enter__(self):
         tname = threading.current_thread().name
         _thread_fragments[tname].append(self)
-        # d = _thread_fragments.setdefault(tname, ErratorDeque())
-        # d.append(self)
         self.calling = self
         return self
 
     def __exit__(self, exc_type, exc_val, _):
         tname = threading.current_thread().name
         d = _thread_fragments[tname]
-        # d = _thread_fragments.setdefault(tname, ErratorDeque())
         if exc_type is None:
             # then all went well; pop ourselves off the end
             self.status = self.COMPLETED
@@ -560,7 +557,6 @@ def narrate(str_or_func):
             fragment = NarrationFragment.get_instance(str_or_func, m, *args, **kwargs)
             fragment.calling = m
             tname = threading.current_thread().name
-            # frag_deque = _thread_fragments.setdefault(tname, ErratorDeque())
             frag_deque = _thread_fragments[tname]
             frag_deque.append(fragment)
             try:

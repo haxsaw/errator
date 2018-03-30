@@ -2,7 +2,7 @@
 Using Errator
 #############
 
-#. `If you don't ready anything else, READ THIS <#if-you-don-t-read-anything-else-read-this>`__
+#. `If you don't read anything else, READ THIS <#if-you-don-t-read-anything-else-read-this>`__
 #. `Errator's operation <#errator-s-operation>`__
 #. `Capturing the narration <#capturing-the-narration>`__
 #. `Skipping decorating functions <#skipping-decorating-functions>`__
@@ -460,25 +460,26 @@ Advanced fragment access
 ------------------------
 
 Errator provides a way to get copies of the actual objects where narration fragments are stored. There are
-a number of situation where this is useful:
+a number of situations where this is useful:
 
 - if more control over fragment formatting is required
 - if retention of the details of an error narration is required
 - you're just that way
 
-You can get these objects by using the ``copy_narration()`` function. Instead of returning a list of strings like ``get_narration()`` does, this function returns a list of ``NarrationFragment``
+You can get these objects by using the ``copy_narration()`` function. Instead of returning a list of strings
+like ``get_narration()`` does, this function returns a list of ``NarrationFragment``
 objects which are copies of the
 objects managed by errator itself. The ``copy_narration()`` function takes the same ``thread`` and
 ``from_here`` arguments as does ``get_narration()``, so you can control what objects are returned in
-the same manner. Useful methods on these objects are:
+the same manner. Useful methods on NarrationFragment objects are:
 
 - ``tell()``, which returns a string that is the fragment's part of the overall narration
 - ``tell_ex()``, similar to ``tell()`` but provides more contextual information (not fully implemented)
 - ``fragment_exception_text()``, which returns a string that describes the actual exception; really
   only useful on the last fragment in the call chain
 
-Being a lower-level object, you should expect its interface to be a bit more volatile, and should stick
-with calling ``tell()`` if you wish to be isolated from change.
+Being a lower-level object, you should expect the rest of NarrationFragment's interface to be a bit more volatile,
+and should stick with calling ``tell()`` if you wish to be isolated from change.
 
 Verbose narrations
 ------------------
@@ -582,7 +583,11 @@ those in testing).
 Tidying up stack traces
 -----------------------
 
-Errator's ``narrate()`` decorator wraps the function being decorated, which means that if you use the various stack and traceback reporting functions in the standard ``traceback`` module, you can get materially longer traces than you'd otherwise like. If you'd rather not see these, errator supplies a set of wrapper functions that are analogs of the functions in ``traceback`` that strip out the errator calls from returned objects or printed stack traces. These functions are all argument-compatible with the functions in ``traceback``. Specifically, errator provides analogs to:
+Errator's ``narrate()`` decorator wraps the function being decorated, which means that if you use the various stack
+and traceback reporting functions in the standard ``traceback`` module, you can get materially longer traces than
+you'd otherwise like. If you'd rather not see these, errator supplies a set of wrapper functions that are analogs of
+the functions in ``traceback`` that strip out the errator calls from returned objects or printed stack traces. These
+functions are all argument-compatible with the functions in ``traceback``. Specifically, errator provides analogs to:
 
 - extract_tb
 - extract_stack
