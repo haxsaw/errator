@@ -7,7 +7,6 @@ or method in the case of an exception.
 """
 import threading
 from errator import narrate_cm, narrate, get_narration
-import traceback
 
 
 # narrate the call to f2, using a lambda to show the arguments passed when an exception occurs

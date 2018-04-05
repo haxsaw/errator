@@ -1,4 +1,4 @@
-from errator import narrate_cm, narrate, get_narration
+from errator import narrate_cm, narrate, get_narration, set_narration_options
 
 
 @narrate("So I started to 'f1'...")
@@ -18,8 +18,9 @@ def f3():
 
 
 if __name__ == "__main__":
+    set_narration_options(verbose=True)
     try:
         f1()
     except:
-        for l in get_narration(verbose=True):
+        for l in get_narration():
             print(l)

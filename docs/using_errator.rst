@@ -490,7 +490,7 @@ Consider this narrated program in a file named verbose.py:
 
 .. code-block::
 
-    from errator import narrate_cm, narrate, get_narration
+    from errator import narrate_cm, narrate, get_narration, set_narration_options
 
     @narrate("So I started to 'f1'...")
     def f1():
@@ -506,10 +506,11 @@ Consider this narrated program in a file named verbose.py:
         raise Exception("oops")
 
     if __name__ == "__main__":
+        set_narration_options(verbose=False)
         try:
             f1()
         except:
-            for l in get_narration(verbose=False):
+            for l in get_narration():
                 print(l)
 
 Which yields the following output when run:
@@ -521,7 +522,7 @@ Which yields the following output when run:
       during which I started a narration context...
     ...and that led me to finally 'f3', but exception type: Exception, value: 'oops' was raised
 
-If we set ``verbose=True`` in the ``get_narration()`` call, then the output looks like the following:
+If we set ``verbose=True`` in the ``set_narration_options()`` call, then the output looks like the following:
 
 .. code-block::
 
