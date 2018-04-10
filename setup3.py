@@ -2,19 +2,19 @@ from distutils.core import setup
 import setuptools
 from Cython.Build import cythonize
 
+version = "0.3"
 
-# from errator import __version__
 
 setup(
     name="errator",
-    ext_modules=cythonize("_errator.pyx"),
+    ext_modules=cythonize("_errator.pyx", language_level=3),
     py_modules=["errator"],
-    version="0.3",
+    version=version,
     description="Errator allows you to create human-readable exception narrations",
     author="Tom Carroll",
     author_email="actuator@pobox.com",
     url="https://github.com/haxsaw/errator",
-    download_url="https://github.com/haxsaw/errator/tarball/%s" % "0.3",
+    download_url="https://github.com/haxsaw/errator/tarball/%s" % version,
     keywords=["exception", "logging", "traceback", "stacktrace"],
     classifiers=[],
     license="MIT"

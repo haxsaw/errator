@@ -66,11 +66,12 @@ class ErratorDeque(deque):
             last one to pop from the deque, False otherwise.
         :return:
         """
+        selfpop = self.pop
         while self and not f(self[-1]):
-            inst = self.pop()
+            inst = selfpop()
             inst.__class__.return_instance(inst)
         if self:
-            inst = self.pop()
+            inst = selfpop()
             inst.__class__.return_instance(inst)
         return
 
@@ -197,7 +198,7 @@ cdef class NarrationFragment(object):
         cdef str tale = self.format(verbose=verbose)
         return tale
 
-    cdef fragment_exception_text(self, etype, text):
+    cpdef fragment_exception_text(self, etype, text):
         self.exception_text = "exception type: {}, value: '{}'".format(etype.__name__, text)
 
 
@@ -228,7 +229,7 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
         return self
 
     def __exit__(self, exc_type, exc_val, _):
-        tname = current_thread().name
+        cdef str tname = current_thread().name
         d = _thread_fragments[tname]
         if exc_type is None:
             # then all went well; pop ourselves off the end
@@ -259,13 +260,15 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
                     stack = inspect.stack()
                     stack.reverse()
                     sc = deque(stack + tb)  # NOTE: slightly different than for func decorators!
+                    scpop = sc.pop
                     deck = deque(d)
+                    deckpop = deck.pop
                     while deck and sc:
                         while sc and not deck[-1].frame_describes_func(sc[-1]):
-                            sc.pop()
+                            scpop()
                         if sc:
                             deck[-1].annotate_fragment(sc[-1])
-                            deck.pop()
+                            deckpop()
             else:
                 self.status = self.PASSEDTHRU_EXCEPTION
             try:
@@ -302,13 +305,11 @@ def narrate(str_or_func):
         cdef str func_name=m.__name__, source_file=inspect.getsourcefile(m)
         def narrate_it(*args, **kwargs):
             global current_thread
-            cdef str tname
             cdef NarrationFragment fragment = NarrationFragment.get_instance(str_or_func, m, *args, **kwargs)
             fragment.func_name = func_name
             fragment.source_file = source_file
             fragment.calling = m
-            tname = current_thread().name
-            frag_deque = _thread_fragments[tname]
+            frag_deque = _thread_fragments[current_thread().name]
             frag_deque.append(fragment)
             try:
                 _v = m(*args, **kwargs)
@@ -335,13 +336,15 @@ def narrate(str_or_func):
                         stack = inspect.stack()
                         stack.reverse()
                         sc = deque(stack + tb[1:])
+                        scpop = sc.pop
                         deck = deque(frag_deque)
+                        deckpop = deck.pop
                         while deck and sc:
                             while sc and not deck[-1].frame_describes_func(sc[-1]):
-                                sc.pop()
+                                scpop()
                             if sc:
                                 deck[-1].annotate_fragment(sc[-1])
-                                deck.pop()
+                                deckpop()
                 else:
                     fragment.status = fragment.PASSEDTHRU_EXCEPTION
                 try:
@@ -378,23 +381,25 @@ cpdef list get_narration(thread=None, bint from_here=False):
     :return: list of formatted strings.
     """
     cdef list l
+    cdef bint verbose
     if thread is None:
         thread = current_thread()
     elif not isinstance(thread, Thread):
         raise ErratorException("the 'thread' argument isn't an instance of Thread: {}".format(thread))
     d = _thread_fragments.get(thread.name)
     if not d:
-        l = []
+        l = list()
     else:
         verbose = d.verbose
         if not from_here:
             l = [nf.tell(verbose=verbose) for nf in d]
         else:
             # collect from the last IN_PROCESS fragment to the exception
-            l = []
+            l = list()
+            lappend = l.append
             for i in range(-1, -1 * len(d) - 1, -1):
                 if d[i].status == NarrationFragment.IN_PROCESS:
                     for j in range(i, 0, 1):
-                        l.append(d[j].tell(verbose=verbose))
+                        lappend(d[j].tell(verbose=verbose))
                     break
     return l

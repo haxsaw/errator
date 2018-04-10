@@ -1,0 +1,31 @@
+1.  To build a local version of errator for testing:
+
+    python setup[2|3].py build_ext --inplace
+
+    (make sure to have cython installed). The proper setup*.py to use is based on the version
+    of Python you are using to build the extension
+
+
+2.  To build the wheel for distribution:
+
+    python setup[2|3].py bdist_wheel --python-tag py[2|3]
+
+    This will place the wheel in the dist subdirectory. The proper setup*.py to use is based on the version
+    of Python you are using to build the extension
+
+
+3.  To upload to test PyPI using twine:
+
+    twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+
+    Run this from the project root directory.
+
+    This will upload all the created distributions. This should include any distros from windows
+
+4.  To upload to the real PyPI using twine:
+
+    twine upload dist/*
+
+    Run this from the project root directory.
+
+    This will upload all the created distributions. This should include any distros from windows

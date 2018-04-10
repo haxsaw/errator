@@ -9,9 +9,9 @@ import threading
 from errator import narrate_cm, narrate, get_narration
 
 
-# narrate the call to f2, using a lambda to show the arguments passed when an exception occurs
+# narrate the call to nf2, using a lambda to show the arguments passed when an exception occurs
 @narrate(lambda a3, a4:
-         "...I was subsequently asked to f2 with {} and {}".format(a3, a4))
+         "...I was subsequently asked to nf2 with {} and {}".format(a3, a4))
 def f2(arg3, arg4):
     # use a narration context manager to wrap a block of code with narration
     with narrate_cm("...so I first started to do 'this'"):
@@ -25,8 +25,8 @@ def f2(arg3, arg4):
         raise Exception("ruh-roh")
 
 
-# narrate the call to f1, using a lambda to show the arguments passed when an exception occurs
-@narrate(lambda a1, a2: "I was asked to f1 with {} and {}".format(a1, a2))
+# narrate the call to nf1, using a lambda to show the arguments passed when an exception occurs
+@narrate(lambda a1, a2: "I was asked to nf1 with {} and {}".format(a1, a2))
 def f1(arg1, arg2):
     # do some things, then
     try:
