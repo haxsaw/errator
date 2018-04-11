@@ -1,3 +1,7 @@
+"""
+Use this setup file if building for Python 2.x
+"""
+
 from distutils.core import setup
 import setuptools
 from Cython.Build import cythonize

@@ -1,3 +1,7 @@
+"""
+Use this setup for Python3 builds of errator
+"""
+
 from distutils.core import setup
 import setuptools
 from Cython.Build import cythonize
