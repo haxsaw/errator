@@ -18,7 +18,7 @@ setup(
     author="Tom Carroll",
     author_email="actuator@pobox.com",
     url="https://github.com/haxsaw/errator",
-    download_url="https://github.com/haxsaw/errator/tarball/%s" % version,
+    download_url="https://github.com/haxsaw/errator/archive/%s.tar.gz" % version,
     keywords=["exception", "logging", "traceback", "stacktrace"],
     classifiers=[],
     license="MIT"

@@ -3,13 +3,23 @@ errator
 
 Provide human-readable error narration of exception tracebacks with ``errator``.
 
-#. `What's new in 0.2.1 <#what-s-new-in-0-2-1>`__
+#. `What's new in 0.3 <#what-s-new-in-0-3>`__
 #. `Intro <#intro>`__
 #. `How it works <#how-it-works>`__
 #. `Requirements <#requirements>`__
 #. `Installing <#installing>`__
 #. `Quick Start <#quick-start>`__
 #. `Building from source <#building-from-source>`__
+
+What's new in 0.3
+-----------------
+This is largely a performance release for ``errator``, as it implements the more costly part of the narration process in a `Cython <http://cython.org/>`__ extension. Additionally, there has been a change in the way verbose narrations are performed, as the original approach entailed a lot of overhead even if verbose narrations weren't required.
+
+- ``errator`` now consists of a Python file and a  Python extension module (built from a Cython source), which improves runtime performance
+
+- The 'verbose' keyword argument has been removed from the ``get_narration()`` function, and has been added to the ``set_narration_options()`` and ``set_default_options()`` functions. Now getting verbose narrations is a matter of setting the option either as a default or on a per-thread basis, hence this option must be set `before` collecting narrations.
+
+- Previously, detailed exception information (file name, line number) was always collected in case a user wanted to fetch verbose narration information with ``get_narration()``. However, this proved to be a big performance hit, and now this information is `only` collected if the 'verbose' option has been set with ``set_narration_options()`` or ``set_default_options()`` function `before` the exception occurs.
 
 What's new in 0.2.1
 -------------------
@@ -20,7 +30,7 @@ This patch release addresses certain performance issues:
 
 - Removed some redundant resetting of state in narration fragment objects
 
-- Added caching of filenames for fucntion objects so that lookups aren't always required
+- Added caching of filenames for function objects so that lookups aren't always required
 
 - Sped up the resetting process
 
@@ -280,11 +290,20 @@ If there isn't a pre-built distribution for your platform, you can build ``errat
 - Python header files for your version of Python
 - Cython
 
+There are now two setup.py files, one for Python 2 and the other for 3 (setup2.py, setup3.py), which will undoubtedly break something somewhere.
+
 In the project root, run the following command:
 
 .. code::
 
-    python setup.py build_ext --inplace
+    python setup(2|3).py build_ext --inplace
 
-This will create the shared library that is used by ``errator``. You can then do the normal ``python setup.py install`` dance to put the built distribution where you want it to go, or you can simply use it right from where you built it.
+...using the value 2 or 3, depending on the version of Python you're building for. This will create the shared library that is used by ``errator``. You can then do the normal ``python setup.py install`` dance to put the built distribution where you want it to go, or you can simply use it right from where you built it.
 
+If you want to build a wheel, the command is:
+
+.. code::
+
+    python setup(2|3).py bdist_wheel --python-tag py(2|3)
+
+...again, selecting the value 2 or 3 consistently depending on your Python version.
