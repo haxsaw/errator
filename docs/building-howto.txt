@@ -1,3 +1,10 @@
+NOTE FOR WINDOWS BUILDS:
+While you still need virtualenvs to drive the build, you can't simply do so from a regular cmd.exe window.
+Instead, you need a machine with the MS VisualStudio Community edition installed, and from there you need
+to find the Developer Command Prompt. Start this up, and you'll be inside an environment that will be able
+locate all the VS tools. From here, you can activate a suitable virtenv, and then do the various commands
+below
+
 1.  To build a local version of errator for testing:
 
     python setup[2|3].py build_ext --inplace
