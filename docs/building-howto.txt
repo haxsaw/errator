@@ -36,3 +36,17 @@ below
     Run this from the project root directory.
 
     This will upload all the created distributions. This should include any distros from windows
+
+5. Packaging for PyPI; linuxmany  FORGET ABOUT LINUXMANY!
+    the image proposed by the instructions below entails an old version of TLS that doesn't seem to update,
+    and hence the steps in the instructions fail. It is kept here to record history, and perhaps look for
+    alternatives to make binary wheels for linux in the future. For now, use sdist packages for Linux.
+
+    see instructions here:
+
+    http://blog.pyspoken.com/tag/manylinux/
+
+    You need to build from a Docker image of CentOS 5.11; start it like so:
+
+    sudo docker run -i -t -v `pwd`:/io quay.io/pypa/manylinux1_x86_64 /bin/bash
+
