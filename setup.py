@@ -17,12 +17,12 @@ if use_cython:
 else:
     ext_modules.append(Extension("_errator", ["_errator.c"]))
 
-version = "0.3.1"
+version = "0.3.2"
 
 
 setup(
     name="errator",
-    ext_modules=[],
+    ext_modules=ext_modules,
     py_modules=["errator"],
     version=version,
     description="Errator allows you to create human-readable exception narrations",
