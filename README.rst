@@ -284,26 +284,23 @@ This outermost function still can retrieve the narration, but as it returns norm
 Building from source
 --------------------
 
-If there isn't a pre-built distribution for your platform, you can build ``errator`` yourself. You'll need:
+``errator`` is built using Cython, however the source package contains the generated C file, so you only need:
 
 - A C compiler
 - Python header files for your version of Python
-- Cython
 
-There are now two setup.py files, one for Python 2 and the other for 3 (setup2.py, setup3.py), which will undoubtedly break something somewhere.
-
-In the project root, run the following command:
+For development, in the project root, run the following command:
 
 .. code::
 
-    python setup(2|3).py build_ext --inplace
+    python setup.py build_ext --inplace
 
-...using the value 2 or 3, depending on the version of Python you're building for. This will create the shared library that is used by ``errator``. You can then do the normal ``python setup.py install`` dance to put the built distribution where you want it to go, or you can simply use it right from where you built it.
+...This will create the shared library that is used by ``errator``. You can then do the normal ``python setup.py install`` dance to put the built distribution where you want it to go, or you can simply use it right from where you built it.
 
 If you want to build a wheel, the command is:
 
 .. code::
 
-    python setup(2|3).py bdist_wheel --python-tag py(2|3)
+    python setup.py bdist_wheel
 
-...again, selecting the value 2 or 3 consistently depending on your Python version.
+If you wish to build from the Cython pyx file, you'll need to grab the source from the Github repo and run the same commands as above; they will run Cython when appropriate.
