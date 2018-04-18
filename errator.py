@@ -9,7 +9,7 @@ except ImportError:
 from _errator import (ErratorException, _default_options, ErratorDeque, _thread_fragments,
                       NarrationFragment, NarrationFragmentContextManager, narrate, get_narration)
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 
 def set_default_options(auto_prune=None, check=None, verbose=None):

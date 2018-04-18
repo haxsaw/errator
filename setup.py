@@ -17,7 +17,13 @@ if use_cython:
 else:
     ext_modules.append(Extension("_errator", ["_errator.c"]))
 
-version = "0.3.2"
+version = "0.3.3"
+
+
+def get_readme():
+    with open("README.rst", "r") as f:
+        readme = f.read()
+    return readme
 
 
 setup(
@@ -26,6 +32,7 @@ setup(
     py_modules=["errator"],
     version=version,
     description="Errator allows you to create human-readable exception narrations",
+    long_description=get_readme(),
     author="Tom Carroll",
     author_email="actuator@pobox.com",
     url="https://github.com/haxsaw/errator",
