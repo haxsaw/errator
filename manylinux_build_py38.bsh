@@ -1,0 +1,35 @@
+#!/bin/bash
+
+mkdir -p /io/wheels
+
+# NOTE: this is a cleanup build for Python 3.8 as the manylinux2010 build can't
+# seem to build an extension properly. This one is expected to run after the main
+# build and from within manylinux1
+
+# compile
+for VER in cp38-cp38; do
+  PYBIN=/opt/python/${VER}/bin
+  echo Processing "${PYBIN}"
+  ${PYBIN}/python -m pip install --upgrade pip
+  "${PYBIN}"/pip install -r /io/requirements.txt
+  "${PYBIN}"/pip wheel /io/ --no-deps -w /io/wheels
+done
+
+# repair; make manylinux wheels
+for WHEEL in /io/wheels/*cp38*.whl; do
+  if ! auditwheel show "${WHEEL}"; then
+    echo "Skipping non-platform wheel ${WHEEL}"
+  else
+    auditwheel repair "${WHEEL}" --plat manylinux2014_x86_64 -w /io/wheels
+  fi
+done
+
+# install and test
+for VER in cp38-cp38; do
+  PYBIN=/opt/python/${VER}/bin
+  "${PYBIN}"/pip install errator --no-index -f /io/wheels
+  "${PYBIN}"/pytest /io/tests.py
+done
+
+cd /io/wheels
+rm `ls *.whl|grep -v manylinux`

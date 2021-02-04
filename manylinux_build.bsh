@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# This builds for Python 3.6-3.9, excluding 3.8, which is done in another script
+
+mkdir -p /io/wheels
+
+rm -f /io/wheels/*.whl
+
+# compile
+for VER in cp36-cp36m cp37-cp37m cp39-cp39; do
+  PYBIN=/opt/python/${VER}/bin
+  echo ========================='>' Processing "${PYBIN}"
+  ${PYBIN}/python -m pip install --upgrade pip
+  "${PYBIN}/pip" install -r /io/requirements.txt
+  "${PYBIN}/pip" wheel /io/ --no-deps -w /io/wheels
+  echo
+done
+
+# repair; make manylinux wheels
+for WHEEL in /io/wheels/*.whl; do
+  if ! auditwheel show "${WHEEL}"; then
+    echo "Skipping non-platform wheel ${WHEEL}"
+  else
+    auditwheel repair "${WHEEL}" --plat manylinux2010_x86_64 -w /io/wheels
+  fi
+done
+
+# install and test
+for VER in cp36-cp36m cp37-cp37m cp39-cp39; do
+  PYBIN=/opt/python/${VER}/bin
+  "${PYBIN}"/pip install errator --no-index -f /io/wheels
+  "${PYBIN}"/pytest /io/tests.py
+done
+
+cd /io/wheels
+rm `ls *.whl|grep -v manylinux`

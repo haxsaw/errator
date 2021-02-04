@@ -3,21 +3,14 @@ Use this setup for Python3 builds of errator
 """
 
 from distutils.core import setup
-from setuptools.extension import Extension
-try:
-    from Cython.Build import cythonize
-except ImportError:
-    use_cython = False
-else:
-    use_cython = True
+from Cython.Build import cythonize
 
 ext_modules = []
-if use_cython:
-    ext_modules.extend(cythonize("_errator.pyx"))
-else:
-    ext_modules.append(Extension("_errator", ["_errator.c"]))
+ext_modules.extend(cythonize("_errator.pyx",
+                             compiler_directives={'language_level': '3',
+                                                  'embedsignature': True}))
 
-version = "0.3.3"
+version = "0.4"
 
 
 def get_readme():
@@ -34,7 +27,7 @@ setup(
     description="Errator allows you to create human-readable exception narrations",
     long_description=get_readme(),
     author="Tom Carroll",
-    author_email="actuator@pobox.com",
+    author_email="tcarroll@incisivetech.co.uk",
     url="https://github.com/haxsaw/errator",
     download_url="https://github.com/haxsaw/errator/archive/%s.tar.gz" % version,
     keywords=["exception", "logging", "traceback", "stacktrace"],

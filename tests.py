@@ -3,10 +3,7 @@ import sys
 import threading
 from errator import *
 from _errator import (_thread_fragments,)
-try:
-    from io import StringIO
-except ImportError:
-    from cStringIO import StringIO
+from io import StringIO
 
 
 def test01():
@@ -623,7 +620,7 @@ def test24():
 
 def test25():
     """
-    test25: check that we get an ErratorException when we try to run a broken callable for a context
+    test25: check that we raise a fragment formatting exception for a bad callable
     """
 
     set_narration_options(check=True)
@@ -633,7 +630,9 @@ def test25():
         with narrate_cm(lambda arg: "oops"):
             pass
     except ErratorException:
-        pass
+        assert any(">>>>" in l for l in get_narration()), "no format failure messages"
+    except Exception as e:
+        assert False, f'{e} was raised'
     else:
         assert False, "We should have raised an exception"
 
@@ -642,7 +641,8 @@ def test25():
 
 def test26():
     """
-    test26: check that we get an ErratorException when we try to run a broken callable during an exception
+    test26: check that we get an ErratorException when we try to run a broken
+    callable during an exception
     """
     set_narration_options(check=False)
     reset_all_narrations()
@@ -651,7 +651,7 @@ def test26():
         with narrate_cm(lambda arg: "oops"):
             raise KeyError("not this one")
     except ErratorException:
-        pass
+        assert any(">>>>" in l for l in get_narration())
     except KeyError:
         assert False, "KeyError should not have come through"
     else:
@@ -672,7 +672,7 @@ def test27():
     try:
         f()
     except ErratorException:
-        pass
+        assert any(">>>>" in l for l in get_narration())
     else:
         assert False, "we should have got an exception"
     set_narration_options(check=False)
@@ -692,7 +692,7 @@ def test28():
     try:
         f()
     except ErratorException:
-        pass
+        assert any(">>>>" in l for l in get_narration())
     except KeyError:
         assert False, "We shouldn't have gotten a KeyError"
     else:
@@ -1130,8 +1130,197 @@ def test48():
     assert to_find not in result
 
 
+def test49():
+    """
+    test49: check that get_narration with different tags don't get the fragments
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("test49", tags=["wibble"])
+    def f():
+        raise KeyError('ugh')
+
+    try:
+        f()
+    except KeyError:
+        assert len(get_narration(with_tags=["wobble"])) == 0
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test50():
+    """
+    test50: check that get_narration with same tag gets the fragment
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("test50", tags=["wibble"])
+    def f():
+        raise KeyError('ugh')
+
+    try:
+        f()
+    except KeyError:
+        assert any(['test50' in l for l in get_narration(with_tags=['wibble'])]),  \
+                f'got: {get_narration(with_tags=["wibble"])}'
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test51():
+    """
+    test51: check that using get_narration() with no tags gets all fragments
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("test51", tags=["wibble"])
+    def f():
+        raise KeyError('ugh')
+
+    try:
+        f()
+    except KeyError:
+        assert any(['test51' in l for l in get_narration()]),  \
+                f'got: {get_narration()}'
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test52():
+    """
+    test52: check that a fragment with no tag is picked up when looking for a tag
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate("test52")
+    def f():
+        raise KeyError('ugh')
+
+    try:
+        f()
+    except KeyError:
+        assert any(['test52' in l for l in get_narration(with_tags=["wibble"])]),  \
+                f'got: {get_narration(with_tags=["wibble"])}'
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test53():
+    """
+    test53: Check that we do pick up context manager fragments with the right tag
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    def f():
+        with narrate_cm("test53cm", tags=["wibble"]):
+            raise KeyError('oops')
+
+    try:
+        f()
+    except KeyError:
+        assert len(get_narration(with_tags=['wibble'])) == 1
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test54():
+    """
+    test54: check that we don't pick up cm fragments with the wrong tag
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    def f():
+        with narrate_cm("test54cm", tags=["wibble"]):
+            raise KeyError('oops')
+
+    try:
+        f()
+    except KeyError:
+        assert len(get_narration(with_tags=['wobble'])) == 0
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test55():
+    """
+    test55: check we pick up cm fragements that don't have a tag
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    def f():
+        with narrate_cm("test55cm"):
+            raise KeyError('oops')
+
+    try:
+        f()
+    except KeyError:
+        assert len(get_narration(with_tags=['wobble'])) == 1
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test56():
+    """
+    test56: check we pick up a tagged cm when we don't specify any
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    def f():
+        with narrate_cm("test56cm", tags=['ibble']):
+            raise KeyError('oops')
+
+    try:
+        f()
+    except KeyError:
+        assert len(get_narration()) == 1
+    except Exception as e:
+        assert False, f'got an {e}'
+
+
+def test57():
+    """
+    test57: test a stack of calls, only pick up 1/2 of the fragments with tags
+    """
+    set_narration_options(check=False)
+    reset_all_narrations()
+
+    @narrate('f1', tags=["hit"])
+    def f1():
+        f2()
+
+    @narrate('f2', tags=['miss', 'common'])
+    def f2():
+        f3()
+
+    def f3():
+        with narrate_cm('f3cm', tags=['hit', 'common']):
+            f4()
+
+    @narrate('f4', tags=['miss'])
+    def f4():
+        raise KeyError('you sunk my battleship')
+
+    try:
+        f1()
+    except KeyError:
+        pass
+    except Exception as e:
+        assert False, f'got an {e}'
+    else:
+        assert len(get_narration(with_tags=["hit"])) == 2
+        assert len(get_narration(with_tags=["miss"])) == 2
+        assert len(get_narration(with_tags=["common"])) == 2
+
+
 def do_all():
-    test03()
     for k, v in sorted(globals().items()):
         if callable(v) and k.startswith("test"):
             print("Running test {}".format(k))

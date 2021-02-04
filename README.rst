@@ -3,13 +3,34 @@ errator
 
 Provide human-readable error narration of exception tracebacks with ``errator``.
 
-#. `What's new in 0.3 <#what-s-new-in-0-3>`__
+#. `What's new in 0.4 <#what-s-new-in-0-3>`__
 #. `Intro <#intro>`__
 #. `How it works <#how-it-works>`__
 #. `Requirements <#requirements>`__
 #. `Installing <#installing>`__
 #. `Quick Start <#quick-start>`__
 #. `Building from source <#building-from-source>`__
+
+What's new in 0.4
+-----------------
+This has largely been a maintenance release which focused on two aspects:
+
+- Get the 'manylinux' builds in order.
+
+- Add type annotations where it made sense.
+
+However, it also fixed a bug where if a fragment formatting function raised an exception
+it would not provide any data for that fragment (and possibly any others).
+
+There is also a new capability: you can now add a `tags` keyword argument to both
+`narrate()` and `narrate_cm()` to allow selective retrieval of narration fragments
+with the `get_narration()` function using the `with_tags` keyword argument to that
+function. In either case, the tags are a list of strings. If `narrate()` or `narrate_cm()`
+are used without tags, then their fragments are always included in the return from
+`get_narration()`. If `get_narration()` doesn't specify any tags, then every current
+fragement is returned regards of the absence or presence of tags. Otherwise, when using
+`get_narration()` with tags, a fragment must have one or more tags in common with those
+specified in `get_narration()` in order to be returned from that function.
 
 What's new in 0.3
 -----------------
@@ -70,7 +91,7 @@ Requirements
 Installing
 ----------
 
-As of 0.3, ``errator`` is comprised of a Python module and an extension wrapper. You can install it with ``pip install errator``, or you can clone the Git project and build from source (more on this below).
+As of 0.3, ``errator`` is comprised of a Python module and an extension. You can install it with ``pip install errator``, or you can clone the Git project and build from source (more on this below).
 
 Quick Start
 -----------

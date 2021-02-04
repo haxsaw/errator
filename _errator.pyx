@@ -1,6 +1,9 @@
 from collections import deque, defaultdict
 import inspect
-from threading import current_thread, Thread
+import sys
+from threading import Thread, current_thread
+from typing import Iterable
+import traceback
 
 _default_options = {"auto_prune": True,
                     "check": False,
@@ -12,7 +15,9 @@ class ErratorException(Exception):
 
 
 class ErratorDeque(deque):
-    def __init__(self, iterable=(), auto_prune=None, check=None, verbose=None):
+
+    def __init__(self, iterable: Iterable = (), auto_prune: bool = None,
+                 check: bool = None, verbose:bool = None):
         super(ErratorDeque, self).__init__(iterable=iterable)
         self.__dict__.update(_default_options)
         if auto_prune is not None:
@@ -27,7 +32,8 @@ class ErratorDeque(deque):
     def set_check(self, value):
         """
         sets the check flag to the provided boolean value
-        :param value: interpreted as a boolean value for self.check; if None don't change the value
+        :param value: interpreted as a boolean value for self.check; if None don't change
+            the value
         :return: self
         """
         if value is not None:
@@ -37,7 +43,8 @@ class ErratorDeque(deque):
     def set_auto_prune(self, value):
         """
         sets the auto_prune flag to the provided boolean value
-        :param value: interpreted as a boolean value for self.auto_prune; if None don't change the value
+        :param value: interpreted as a boolean value for self.auto_prune; if None don't
+            change the value
         :return: self
         """
         if value is not None:
@@ -47,7 +54,8 @@ class ErratorDeque(deque):
     def set_verbose(self, value):
         """
         sets the verbose flag to the provided boolean value
-        :param value: interpreted as a boolean value for self.verbose; if None don't change
+        :param value: interpreted as a boolean value for self.verbose; if None don't
+            change
         :return: self
         """
         if value is not None:
@@ -56,15 +64,18 @@ class ErratorDeque(deque):
 
     def pop_until_true(self, f):
         """
-        Performs pop(right) from the deque up to and including the element for which f returns True
+        Performs pop(right) from the deque up to and including the element for which f
+            returns True
 
-        This method tests the last element in the deque (right end) using the supplied function f.
-        If f returns False for the element, the element is popped and the test repeated for new last
-        element. If f returns True, that element is popped and the method returns. If f never returns
-        True, then all elements will be popped from the list.
-        :param f: callable of one argument, an item on the deque. Returns True if the item is the
-            last one to pop from the deque, False otherwise.
-        :return:
+        This method tests the last element in the deque (right end) using the supplied
+        function f. If f returns False for the element, the element is popped and the
+        test repeated for new last element. If f returns True, that element is popped
+        and the method returns. If f never returns True, then all elements will be
+        popped from the list.
+
+        :param f: callable of one argument, an item on the deque. Returns True if the
+            item is the last one to pop from the deque, False otherwise.
+        :return: None
         """
         selfpop = self.pop
         while self and not f(self[-1]):
@@ -76,8 +87,8 @@ class ErratorDeque(deque):
         return
 
 
-# _thread_fragments is hashed by a thread's name and contains a deque NarrationFragment for each frame
-# in the thread's call path
+# _thread_fragments is hashed by a thread's name and contains a deque NarrationFragment
+# for each frame in the thread's call path
 _thread_fragments = defaultdict(ErratorDeque)
 
 
@@ -91,6 +102,7 @@ cdef class NarrationFragment(object):
     cdef public int status
     cdef public str func_name, source_file
     cdef public int lineno
+    cdef public frozenset tags
     # CYTHON
 
     IN_PROCESS = 1
@@ -101,6 +113,8 @@ cdef class NarrationFragment(object):
     _free_instances = deque()
 
     _callable_id_to_filename = {}
+
+    _empty_set = frozenset()
 
 
     @classmethod
@@ -138,6 +152,16 @@ cdef class NarrationFragment(object):
         self.func_name = None
         self.source_file = None
         self.lineno = 0
+        self.tags = self._empty_set
+
+    cpdef set_tags(self, tags: frozenset):
+        self.tags = tags
+
+    cdef bint are_tags_disjoint(self, frozenset other_tags):
+        return self.tags.isdisjoint(other_tags)
+
+    cdef bint any_tags(self):
+        return len(self.tags) != 0
 
     cpdef bint frame_describes_func(self, frame):
         """
@@ -168,38 +192,63 @@ cdef class NarrationFragment(object):
         new.lineno = src.lineno
         return new
 
-    cpdef str format(self, bint verbose=False):
+    cpdef str format(self, bint verbose=False, bint best_effort_return=False):
         cdef str result
-        cdef str tale = (self.text_or_func(*self.args, **self.kwargs)
-                         if callable(self.text_or_func)
-                         else self.text_or_func)
+        cdef str tale
 
-        self.args = self.kwargs = None
+        try:
+            tale = (self.text_or_func(*self.args, **self.kwargs)
+                    if callable(self.text_or_func)
+                    else self.text_or_func)
 
-        if self.exception_text:
-            tale = "{}, but {} was raised".format(tale, self.exception_text)
-            self.exception_text = None
-        self.text_or_func = tale
+            self.args = self.kwargs = None
 
-        if verbose and self.func_name:
-            if self.lineno is not None:
-                result = "\n".join([tale, "    line %s in %s, %s" % (str(self.lineno),
-                                                                   str(self.func_name),
-                                                                   str(self.source_file))])
+            if self.exception_text:
+                tale = "{}, but {} was raised".format(tale, self.exception_text)
+                self.exception_text = None
+            self.text_or_func = tale
+
+            if verbose and self.func_name:
+                if self.lineno is not None:
+                    result = "\n".join([tale, "    line %s in %s, %s" %
+                                        (str(self.lineno),
+                                         str(self.func_name),
+                                         str(self.source_file))])
+                else:
+                    result = "\n".join([tale, "%s in %s" % (str(self.func_name),
+                                                            str(self.source_file))])
             else:
-                result = "\n".join([tale, "%s in %s" % (str(self.func_name),
-                                                        str(self.source_file))])
-        else:
-            result = tale
+                result = tale
+        except Exception as _:
+            if not best_effort_return:
+                raise
+            etype, val, tb = sys.exc_info()
+            nested_result = list()
+            prefix = "\t>>>> "
+            nested_result.append(f"{prefix}EXCEPTION DURING ERRATOR "
+                                 f"FRAGMENT FORMATTING for {self.func_name}")
+            nested_result.append(f"{prefix}A fragment formatting callable raised "
+                                 f"exception type {etype}, value '{val}' while errator "
+                                 f"was processing another exception from"
+                                 f" '{self.func_name}'")
+            nested_result.append(f"{prefix}file {self.source_file}, line {self.lineno}")
+            nested_result.append(f"{prefix}The details are:")
+            for fs in traceback.extract_tb(tb):
+                nested_result.append(f"{prefix} line {fs.lineno} in {fs.filename}:"
+                                     f"\n{prefix}   {fs.line}")
+            nested_result.append(f"{prefix}Processing the outer exception "
+                                 f"now continues")
+            result = '\n'.join(nested_result)
 
         return result
 
     cpdef str tell(self, verbose=False):
-        cdef str tale = self.format(verbose=verbose)
+        cdef str tale = self.format(verbose=verbose, best_effort_return=True)
         return tale
 
     cpdef fragment_exception_text(self, etype, text):
-        self.exception_text = "exception type: {}, value: '{}'".format(etype.__name__, text)
+        self.exception_text = "exception type: {}, value: '{}'".format(etype.__name__,
+                                                                       text)
 
 
 cdef inline bint _pop_until_found_calling(item):
@@ -216,8 +265,10 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
             self.func_name = calling_frame[3]
             self.source_file = calling_frame[1]
 
-    cpdef str format(self, bint verbose=False):
-        cdef str tale = super(NarrationFragmentContextManager, self).format(verbose=verbose)
+    cpdef str format(self, bint verbose=False, bint best_effort_return=False):
+        cdef str tale = super(NarrationFragmentContextManager,
+                              self).format(verbose=verbose,
+                                           best_effort_return=best_effort_return)
         cdef list parts = tale.split("\n")
         parts = [" " * (i + 2) + parts[i] for i in range(len(parts))]
         return "\n".join(parts)
@@ -230,6 +281,7 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
 
     def __exit__(self, exc_type, exc_val, _):
         cdef str tname = current_thread().name
+
         d = _thread_fragments[tname]
         if exc_type is None:
             # then all went well; pop ourselves off the end
@@ -241,9 +293,10 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
                     ctx_frame = inspect.getouterframes(inspect.currentframe())[1]
                     frame, fname, lineno, function, _, _ = ctx_frame
                     del frame, function, ctx_frame
-                    raise ErratorException("Failed formatting fragment in context; got exception {}, '{}'; "
-                                           "{}:{} is the last line of the context".format(type(e), str(e),
-                                                                                          fname, lineno))
+                    raise ErratorException("Failed formatting fragment in context; "
+                                           "got exception {}, '{}'; {}:{} is the last "
+                                           "line of the context".format(type(e), str(e),
+                                                                        fname, lineno))
 
             if d and d.auto_prune:
                 d.pop_until_true(_pop_until_found_calling)
@@ -259,7 +312,8 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
                     tb = inspect.trace()
                     stack = inspect.stack()
                     stack.reverse()
-                    sc = deque(stack + tb)  # NOTE: slightly different than for func decorators!
+                    # NOTE: slightly different than for func decorators!
+                    sc = deque(stack + tb)
                     scpop = sc.pop
                     deck = deque(d)
                     deckpop = deck.pop
@@ -277,22 +331,30 @@ cdef class NarrationFragmentContextManager(NarrationFragment):
                 ctx_frame = inspect.getouterframes(inspect.currentframe())[1]
                 frame, fname, lineno, function, _, _ = ctx_frame
                 del frame, function, ctx_frame
-                raise ErratorException("Failed formatting fragment in context; got exception {}, '{}'; "
-                                       "{}:{} is the last line of the context".format(type(e), str(e),
-                                                                                      fname, lineno))
+                raise ErratorException("Failed formatting fragment in context; got "
+                                       "exception {}, '{}';  {}:{} is the last line of "
+                                       "the context".format(type(e), str(e),
+                                                            fname, lineno))
 
 
-def narrate(str_or_func):
+def narrate(str_or_func, tags: Iterable[str] = None):
     """
     Decorator for functions or methods that add narration that can be recovered if the
     method raises an exception
 
     :param str_or_func: either a string that will be captured and rendered if the function
         fails, or else a callable with the same signature as the function/method that is
-        being decorated that will only be called if the function/method raises an exception;
-        in this case, the callable will be invoked with the (possibly modified) arguments
-        that were passed to the function. The callable must return a string, and that will
-        be used for the string that describes the execution of the function/method
+        being decorated that will only be called if the function/method raises an
+        exception; in this case, the callable will be invoked with the (possibly
+        modified) arguments that were passed to the function. The callable must return
+        a string, and that will be used for the string that describes the execution of
+        the function/method
+    :param tags: optional, iterable of strings. If supplied, then the fragment for
+        this narration can be optionally retrieved using get_narration() by the caller
+        of that function supplying one or more of the same string tags that appear in
+        the 'tags' argument of this application of the decorator. If tags aren't supplied,
+        then this narration fragment appears in any list of strings returned by
+        get_narration(), regardless if tags are supplied in that call or not.
 
         NOTE: if a callable is passed in, it will only be called with the decorated
         function's arguments if the decorated function raises an exception during
@@ -302,10 +364,19 @@ def narrate(str_or_func):
         may not be the values that were actually passed into the decorated function.
     """
     def capture_stanza(m):
-        cdef str func_name=m.__name__, source_file=inspect.getsourcefile(m)
+        cdef str func_name = m.__name__, source_file = inspect.getsourcefile(m)
+        cdef frozenset the_tags = None
+
+        if tags is not None:
+            the_tags = frozenset(tags)
+
         def narrate_it(*args, **kwargs):
             global current_thread
-            cdef NarrationFragment fragment = NarrationFragment.get_instance(str_or_func, m, *args, **kwargs)
+            cdef NarrationFragment fragment = NarrationFragment.get_instance(str_or_func,
+                                                                             m, *args,
+                                                                             **kwargs)
+            if the_tags is not None:
+                fragment.set_tags(the_tags)
             fragment.func_name = func_name
             fragment.source_file = source_file
             fragment.calling = m
@@ -318,15 +389,17 @@ def narrate(str_or_func):
                     try:
                         _ = fragment.format()
                     except Exception as e:
-                        raise ErratorException("Failed formatting the fragment for function {}; "
-                                               "received exception {}, '{}'".format(m, type(e), str(e)))
+                        raise ErratorException("Failed formatting the fragment for "
+                                               "function {}; received exception "
+                                               "{}, '{}'".format(m, type(e), str(e)))
                 if frag_deque and frag_deque.auto_prune:
                     frag_deque.pop_until_true(lambda item: item.calling == m)
                 fragment = None
                 return _v
             except Exception as e:
                 if fragment is frag_deque[-1]:
-                    # only grab the exception text if this is the last fragment on the call chain
+                    # only grab the exception text if this is the last fragment
+                    # on the call chain
                     fragment.fragment_exception_text(e.__class__, str(e))
                     fragment.status = fragment.RAISED_EXCEPTION
                     # the following code annotates fragments with stack trace information
@@ -350,8 +423,9 @@ def narrate(str_or_func):
                 try:
                     _ = fragment.format()  # get the formatted fragment right now!
                 except Exception as e:
-                    raise ErratorException("Failed formatting the fragment for function {}; "
-                                           "received exception {}, '{}'".format(m, type(e), str(e)))
+                    raise ErratorException("Failed formatting the fragment for "
+                                           "function {}; received exception {}, '{}'".
+                                           format(m, type(e), str(e)))
                 raise
 
         narrate_it.__name__ = m.__name__
@@ -361,38 +435,55 @@ def narrate(str_or_func):
     return capture_stanza
 
 
-cpdef list get_narration(thread=None, bint from_here=False):
+cpdef list get_narration(thread: Thread=None, bint from_here=False,
+                         with_tags: Iterable=None):
     """
     Return a list of strings, each one a narration fragment in the function call path.
 
-    This method tells the tale of an exception; it returns a list of strings that are the narration fragments
-    from each function/method call or context where narration has been captured. It starts at the most global level
-    and goes to the level where the exception was raised.
+    This method tells the tale of an exception; it returns a list of strings that are the
+    narration fragments from each function/method call or context where narration has 
+    been captured. It starts at the most global level and goes to the level where the 
+    exception was raised.
 
     :param thread: instance of Thread. If not supplied, the current thread is used.
-    :param from_here: boolean, optional, default False. If True, then the list of strings returned is
-        from the narration fragment nearest the active stack frame and down to the exception origin, not
-        from the most global level to the exception. This is useful from where the exception is actually caught,
-        as it provides a way to only show the narration from this point forward. However, not showing all the
-        fragments may actually hide important aspects of the narration, so bear this in mind when using
-        this to prune the narration. Use in conjuction with the auto_prune option set to False to allow
-        several stack frames to return before collecting the narration (be sure to manually clean up
-        the narration when auto_prune is False).
+    :param from_here: boolean, optional, default False. If True, then the list of strings
+        returned is from the narration fragment nearest the active stack frame and down to
+        the exception origin, not from the most global level to the exception. This is 
+        useful from where the exception is actually caught, as it provides a way to 
+        only show the narration from this point forward. However, not showing all the
+        fragments may actually hide important aspects of the narration, so bear this in
+        mind when using this to prune the narration. Use in conjuction with the 
+        auto_prune option set to False to allow several stack frames to return before 
+        collecting the narration (be sure to manually clean up the narration when 
+        auto_prune is False).
+    :param with_tags: iterable, optional, default None. If supplied, will only return
+        narration fragments where the fragment was given one or more of the supplied
+        tags from with_tags. Narrations with no tags at all will always be included
+        regardless of the tags supplied. Likewise, if no tags are supplied, then all
+        narration fragments are returned. However, if an empty tag list is supplied,
+        then no fragments will be returned.
     :return: list of formatted strings.
     """
     cdef list l
     cdef bint verbose
+    cdef frozenset tags = None
+    cdef NarrationFragment nf
+
+    if with_tags is not None:
+        tags = frozenset(with_tags)
     if thread is None:
         thread = current_thread()
     elif not isinstance(thread, Thread):
-        raise ErratorException("the 'thread' argument isn't an instance of Thread: {}".format(thread))
+        raise ErratorException("the 'thread' argument isn't an instance "
+                               "of Thread: {}".format(thread))
     d = _thread_fragments.get(thread.name)
     if not d:
         l = list()
     else:
         verbose = d.verbose
         if not from_here:
-            l = [nf.tell(verbose=verbose) for nf in d]
+            l = [nf.tell(verbose=verbose) for nf in d
+                 if tags is None or not nf.any_tags() or not nf.are_tags_disjoint(tags)]
         else:
             # collect from the last IN_PROCESS fragment to the exception
             l = list()
@@ -400,6 +491,9 @@ cpdef list get_narration(thread=None, bint from_here=False):
             for i in range(-1, -1 * len(d) - 1, -1):
                 if d[i].status == NarrationFragment.IN_PROCESS:
                     for j in range(i, 0, 1):
-                        lappend(d[j].tell(verbose=verbose))
+                        nf = <NarrationFragment>d[j]
+                        if (tags is None or not nf.any_tags() or
+                                not nf.are_tags_disjoint(tags)):
+                            lappend(nf.tell(verbose=verbose))
                     break
     return l

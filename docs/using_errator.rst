@@ -367,6 +367,34 @@ Lambdas provide a nice way to specify a function that yields a string:
 
 But you can supply any callable that can cope with the argument list to the decorated function. This allows your narrations to provide more details regarding the calling context of a particular function, since actual argument values can become part of the narration.
 
+Additionally, you can add tags to your uses of `narrate()` in order to provide a way to
+select only certain narration fragments when you retrieve a narration with
+`get_narration()`. Tags are provided using lists of strings like so:
+
+.. code-block:: python
+
+    @narrate('Some comment', tags=["verbose1", "common"])
+    def some_function():
+        pass
+
+And you can then use the `with_tags` keyword argument to `get_narration()` to only
+retrieve fragments with the tags you specify. So:
+
+.. code-block:: python
+    get_narration(with_tags=["verbose1"])
+
+would get the above fragment, while:
+
+.. code-block:: python
+    get_narration(with_tags=["wibble"])
+
+would not.
+
+Note that calling `get_narration()` with no tags retrieves every narration fragment
+regardless of the tags (or absence thereof), and any use of `narrate()` with no
+tags will return that fragment regardless of what tags have been specified in
+`get_narration()`.
+
 Getting more details with contexts
 ----------------------------------
 
@@ -400,6 +428,10 @@ This example was constructed to illustrate a couple of uses. Similarly to ``narr
 The first use of ``narrate_cm()`` simply passes a fixed string. If there's an exception during the first web service call, the string is retained, but when reported the string will be indented a few spaces to show that the narration fragment is within the scope of the function's narration.
 
 The second use of ``narrate_cm()`` passes a lambda as its callable. But unlike passing a callable to ``narrate()``, you must also supply the arguments to give the callable to ``narrate_cm()``, in this case the local variable *ws2_req*. This is because the context manager doesn't know what is important relative to the context-- the function arguments or the local variables. You may pass both postional and keyword arguments to ``narrate_cm()``.
+
+Similarly to `narrate()`, you can supply a `tags` keyword argument to `narrate_cm()` so
+that this narration fragment can be selectively retrieved using `get_narration()`.
+The rules governing retrieval of a fragment for `get_narration()` apply here as well.
 
 Advanced fragment access
 ------------------------
@@ -536,6 +568,9 @@ Starting with ``errator`` 0.3, the source repository contains a timing test file
 * A simple function is called repeatedly.
 
 Consider running this test on your target platform if there are performance concerns in the use of ``errator``, as your results may inform what functions that you want to narrate.
+
+Note that the addition of tags to your calls to `narrate()` and `narrate_cm()` add
+overhead, with `narrate_cm()` being the more expensive of the two.
 
 Usage tips
 ----------

@@ -1,52 +1,152 @@
-NOTE FOR WINDOWS BUILDS:
-While you still need virtualenvs to drive the build, you can't simply do so from a regular cmd.exe window.
-Instead, you need a machine with the MS VisualStudio Community edition installed, and from there you need
-to find the Developer Command Prompt. Start this up, and you'll be inside an environment that will be able
-locate all the VS tools. From here, you can activate a suitable virtenv, and then do the various commands
-below
+Various build tools for errator:
+================================
 
-1.  To build a local version of errator for testing:
-
-    python setup[2|3].py build_ext --inplace
-
-    (make sure to have cython installed). The proper setup*.py to use is based on the version
-    of Python you are using to build the extension
+General
+-------
+All builds are now mediated through 'pip wheel' and 'setup.py', the former relying on the
+latter. There are different build requirements for development and final builds for
+publishing on PyPI; these are covered below.
 
 
-2.  To build the wheel for distribution:
+Linux Builds
+------------
 
-    python setup[2|3].py bdist_wheel --python-tag py[2|3]
+--General--
 
-    This will place the wheel in the dist subdirectory. The proper setup*.py to use is based on the version
-    of Python you are using to build the extension
+Relevant files: setup.py, setup.cfg, MANIFEST.in, requirements.txt
+
+Regardless of whether the build is for dev or publishing on PyPI, you require the
+following resources on your base Linux platform:
+
+    - gcc
+    - Python development package (header files)
+
+Install these via your platform's package manager.
+
+Additionally, for whatever Python environment you intend to develop in, whether the
+platform's native Python install or a virtualenv, you'll need to install the additional
+requirements for development and testing. These are in the requirements.txt file in the
+root of the project, and can be installed as follows:
+
+    pip install -r requirements.txt
+
+This will add Cython and pytest to your environment, which are only used to build and test
+new versions.
+
+--Dev builds--
+
+Relevant files: devbuild.bsh
+
+Development builds are created using the 'devbuild.bsh' script file found in the root
+of the project. This will create a shared library that you can load from within Python
+with a line that reads:
+
+    import errator
+
+You may have to set execute permissions on the script file. The shared library is built
+right in the project root, but some additional files are created in a 'build' directory
+in the root, which is created if it doesn't exist.
+
+--PyPI (manylinux) builds--
+
+Relevant files: docker_build.bsh, manylinux_build.bsh, manylinux_build_py38.bsh
+
+To build a set of releases for publishing on PyPI, some additional tooling is required.
+You must create a so-called 'manylinux' build to be able to build to publish to PyPI,
+and the simplest way to do that is to utilize the manylinux docker containers to perform
+the build.
+
+You will need to install 'docker' on your build machine using your package manager, and
+then when connected to the internet, you run:
+
+    docker_build.bsh
+
+Which can be found in the root of the project (you may need to set execute permissions).
+This script tells docker to pull down one or more manylinux images (these are the latest
+images, but are cached by docker so they are only pulled down once when new), and then
+a container is started using each image and running one of the manylinux_build*.bsh
+scripts from withing the container. The script creates a 'wheels' directory in the project
+root, and as the stages of the build are performed, the shared libraries and then
+the wheels are written there. Finally, the built wheels are installed into the container's
+Python system and the test program is run to ensure that everything works properly.
+
+NOTE: Currently, there are two different containers run to build for all versions of
+Python supported. This is covered below.
+
+manylinux_build.bsh:
+This builds wheels for Python 3.6, 3.7, and 3.9, using the manylinux2010 image. This
+yields wheels for manylinux1 and manylinux2010.
+
+manylinux_build_py38.bsh:
+Using the manylinux2010 image to build a wheel for Python 3.8 yields errors involving the
+version of glibc, and so to build a wheel for Python 3.8 we use the manylinux1 image.
+This is run after the general manylinux build and so kind of expects any initial cleanup
+to have been done by that script.
+
+When docker_build.sh is done, it will leave working wheels in the 'wheels' directory in
+the project root. Unfortunately these will be owned by root, so to remove them you'll
+need root permissions, either on the development machine or else from mounting the
+directory into a container running a bash session where you can delete them from there.
 
 
-3.  To upload to test PyPI using twine:
+Windows builds
+--------------
 
-    twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+--General--
 
-    Run this from the project root directory.
+Pip has materially simplified building on Windows, both for dev and for PyPI, but there
+are still a couple of pre-requisites that must be addressed.
 
-    This will upload all the created distributions. This should include any distros from windows
+Foremost is that the free Microsoft community edition C++ compiler must be downloaded
+from Microsoft and installed. A quick Google search usually takes you right to it. You
+can alternatively install the free Visual Studio package which includes the compiler.
 
-4.  To upload to the real PyPI using twine:
+Additionally, for whatever Python environment you intend to develop in, whether the
+platform's native Python install or a virtualenv, you'll need to install the additional
+requirements for development and testing. These are in the requirements.txt file in the
+root of the project, and can be installed as follows:
 
-    twine upload dist/*
+    pip install -r requirements.txt
 
-    Run this from the project root directory.
+This will add Cython and pytest to your environment, which are only used to build and test
+new versions.
 
-    This will upload all the created distributions. This should include any distros from windows
+--Dev builds--
 
-5. Packaging for PyPI; linuxmany  FORGET ABOUT LINUXMANY!
-    the image proposed by the instructions below entails an old version of TLS that doesn't seem to update,
-    and hence the steps in the instructions fail. It is kept here to record history, and perhaps look for
-    alternatives to make binary wheels for linux in the future. For now, use sdist packages for Linux.
+Relevant files: devbuild.bat
 
-    see instructions here:
+You can build and in-place shared library using the 'devbuild.bat' file from the Windows
+command line. This will properly invoke the MS C++ compiler and yield a shared library
+that you can load directly into Python with:
 
-    http://blog.pyspoken.com/tag/manylinux/
+    import errator
 
-    You need to build from a Docker image of CentOS 5.11; start it like so:
+--PyPI builds--
 
-    sudo docker run -i -t -v `pwd`:/io quay.io/pypa/manylinux1_x86_64 /bin/bash
+Relevant files: win_pypi_build.bat
+
+When you're ready to create a wheel for pushing to PyPI, run 'win_pypi_build.bat'. This
+will create a wheel directory into which the wheel will be written. You should create a
+fresh virtualenv, install the wheel there, and run the test code in it to ensure that
+the wheel is correct.
+
+
+Uploading to PyPI using twine
+-----------------------------
+
+To upload to test PyPI using twine:
+
+    twine upload --repository-url https://test.pypi.org/legacy/ wheels/*
+
+Run this from the project root directory. This will upload all the created distributions.
+This should include any distros from windows
+
+To upload to the real PyPI using twine:
+
+    twine upload wheels/*
+
+Run this from the project root directory. This will upload all the created distributions.
+This should include any distros from windows/linux.
+
+
 

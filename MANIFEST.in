@@ -1,2 +1,3 @@
 global-include *.pyx
 include README.rst
+include docs/using_errator.rst
