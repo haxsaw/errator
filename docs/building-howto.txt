@@ -123,12 +123,31 @@ that you can load directly into Python with:
 
 --PyPI builds--
 
-Relevant files: win_pypi_build.bat
+Relevant files: win_build_all.bat
 
-When you're ready to create a wheel for pushing to PyPI, run 'win_pypi_build.bat'. This
-will create a wheel directory into which the wheel will be written. You should create a
-fresh virtualenv, install the wheel there, and run the test code in it to ensure that
-the wheel is correct.
+When you're ready to create wheels for pushing to PyPI, run 'win_build_all.bat'. This
+will create a wheels directory into which the wheels will be written.
+
+I haven't cracked a containerized Windows build yet, so instead the windows build is based
+on having multiple versions of Python installed on the build machine. The assumptions here
+are:
+
+    - The available Python verions are in c:\py with names like py36, py37, etc (although
+      this is easily tweaked).
+    - There is a c:\vpy for the creation of virtual build and test environments (this can
+      also be tweaked).
+    - The build machine can reach the internet.
+
+The main file performs a loop in which, for each release of Python:
+
+    - Previous build/test virtualenvs are removed.
+    - A new build virtualenv is created and conditioned.
+    - The wheel for this Python version is built.
+    - A new test virtualenv is created.
+    - The new wheel is installed into the test virtualenv
+    - pytest is run using the test virtualenv and the installed wheel
+
+If all tests pass, then we call this build good.
 
 
 Uploading to PyPI using twine
